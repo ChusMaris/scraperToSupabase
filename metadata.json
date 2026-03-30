@@ -1,0 +1,5 @@
+{
+  "name": "BasquetCatala Unified App",
+  "description": "Unified tool for scraping BasquetCatala data and uploading it to Supabase.",
+  "requestFramePermissions": []
+}
