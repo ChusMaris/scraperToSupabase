@@ -1,57 +1,26 @@
-import { defineConfig, loadEnv } from 'vite';
-import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 import path from 'path';
+import {defineConfig, loadEnv} from 'vite';
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
-  
+export default defineConfig(({mode}) => {
+  const env = loadEnv(mode, '.', '');
   return {
-    plugins: [
-      react(), 
-      tailwindcss(),
-      {
-        name: 'proxy-server',
-        configureServer(server) {
-          server.middlewares.use(async (req, res, next) => {
-            if (req.url?.startsWith('/api/data-fetcher')) {
-              const urlParams = new URL(req.url, `http://${req.headers.host}`);
-              const targetUrl = urlParams.searchParams.get('url');
-              
-              if (!targetUrl) {
-                res.statusCode = 400;
-                return res.end(JSON.stringify({ error: "URL is required" }));
-              }
-
-              try {
-                const response = await fetch(targetUrl, {
-                  headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-                    'Referer': 'https://www.basquetcatala.cat/',
-                  }
-                });
-                
-                const data = await response.text();
-                res.setHeader('Content-Type', response.headers.get('content-type') || 'text/plain');
-                res.end(data);
-              } catch (error) {
-                res.statusCode = 500;
-                res.end(JSON.stringify({ error: "Failed to fetch" }));
-              }
-            } else {
-              next();
-            }
-          });
-        }
-      }
-    ],
+    // Configura la ruta base para que coincida con el nombre de tu repositorio en GitHub
+    base: '/scraperToSupabase/',
+    plugins: [react(), tailwindcss()],
+    define: {
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+    },
     resolve: {
       alias: {
-        '@': path.resolve(process.cwd(), '.'),
+        '@': path.resolve(__dirname, '.'),
       },
     },
     server: {
-      port: 3000,
+      // HMR is disabled in AI Studio via DISABLE_HMR env var.
+      // Do not modify—file watching is disabled to prevent flickering during agent edits.
+      hmr: process.env.DISABLE_HMR !== 'true',
     },
   };
 });
