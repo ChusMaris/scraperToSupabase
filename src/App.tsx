@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { MatchJob, ScrapeStatus, extractMatchId } from './types';
-import { fetchResultsPage, fetchMatchData, delay, parseResultsHtml, fetchCompetitionResultsApi } from './services/scraperService';
-import { uploadMatchToSupabase, UploadMetadata, fetchCategorias, fetchTemporadas, fetchCompeticiones } from './services/supabaseService';
+import { UploadMetadata, fetchCategorias, fetchTemporadas, fetchCompeticiones } from './services/supabaseService';
+import { normalizeImportUrls, runImportBatch } from './services/importService';
 import JobCard from './components/JobCard';
 import { PlayIcon, DownloadIcon, Spinner } from './components/Icon';
 
@@ -31,18 +31,20 @@ const App: React.FC = () => {
     scrollToBottom();
   }, [logs]);
 
-  const loadMasters = useCallback(async () => {
+  const loadMasters = useCallback(async (silent = false) => {
     const [cats, temps, comps] = await Promise.all([
       fetchCategorias(),
       fetchTemporadas(),
       fetchCompeticiones()
     ]);
-    
+
     if (cats.length > 0) setCategoriasList(cats);
     if (temps.length > 0) setTemporadasList(temps);
     if (comps.length > 0) setCompeticionesList(comps);
-    
-    addLog(`Maestros cargados: ${cats.length} categorías, ${temps.length} temporadas, ${comps.length} competiciones.`, 'info');
+
+    if (!silent) {
+      addLog(`Maestros cargados: ${cats.length} categorías, ${temps.length} temporadas, ${comps.length} competiciones.`, 'info');
+    }
   }, []);
 
   // Fetch masters on mount
@@ -54,98 +56,21 @@ const App: React.FC = () => {
     setLogs(prev => [...prev, { msg, type }]);
   };
 
-  // Process a single job and return the data, handling UI updates
-  const processJob = useCallback(async (job: MatchJob, metadata: UploadMetadata, prdMode: boolean, manualJornada: number | null): Promise<boolean> => {
-    // Update status to processing
-    setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: ScrapeStatus.DOWNLOADING_JSON } : j));
-    addLog(`Iniciando extracción para partido ID: ${job.id} (${prdMode ? 'MODO PRD' : 'MODO SIMULACIÓN'})`, 'info');
-    addLog(`URL del partido: ${job.url}`, 'info');
-
-    try {
-      // 1. Fetch Stats in memory
-      addLog(`Descargando estadísticas (JSON)...`, 'info');
-      const statsData = await fetchMatchData(job.id, 'stats', addLog);
-      addLog(`Estadísticas descargadas: ${statsData.teams?.[0]?.name} vs ${statsData.teams?.[1]?.name}`, 'success');
-      
-      // Update UI to show progress (halfway there)
-      setJobs(prev => prev.map(j => j.id === job.id ? { ...j, statsFileDownloaded: true } : j));
-      
-      // Small delay to be gentle with API
-      await delay(500);
-
-      // 2. Fetch Moves in memory
-      addLog(`Descargando movimientos (Play-by-Play)...`, 'info');
-      const movesData = await fetchMatchData(job.id, 'moves', addLog);
-      const movesCount = Array.isArray(movesData) ? movesData.length : (movesData?.moves?.length || 0);
-      addLog(`Movimientos descargados: ${movesCount} eventos encontrados.`, 'success');
-
-      // Update UI
-      setJobs(prev => prev.map(j => j.id === job.id ? { 
-        ...j, 
-        movesFileDownloaded: true,
-        status: ScrapeStatus.UPLOADING 
-      } : j));
-
-      // 3. Upload to Supabase (Traces)
-      addLog(`${prdMode ? '🚀 SUBIENDO A SUPABASE (MODO PRD):' : '🔍 SIMULACIÓN DE DATOS (MODO PRD DESACTIVADO):'}`, 'data');
-      addLog(`- Temporada: ${metadata.temporada}`, 'data');
-      addLog(`- Categoría: ${metadata.categoria}`, 'data');
-      addLog(`- Competicion: ${metadata.competicion}`, 'data');
-      
-      const localTeam = statsData.teams?.[0];
-      const visitorTeam = statsData.teams?.[1];
-      const score = `${localTeam?.players?.[0]?.teamScore || 0} - ${localTeam?.players?.[0]?.oppScore || 0}`;
-      
-      addLog(`- Partido: ${localTeam?.name} vs ${visitorTeam?.name}`, 'data');
-      addLog(`- Resultado final: ${score}`, 'data');
-      
-      const extractedJornada = statsData.jornada || (statsData.match && statsData.match.jornada) || null;
-      const jornadaNumToUse = manualJornada !== null ? manualJornada : extractedJornada;
-      
-      addLog(`- Jornada: ${jornadaNumToUse} ${manualJornada !== null ? '(Manual)' : '(Extraída)'}`, 'data');
-      addLog(`- Jugadores encontrados: ${(localTeam?.players?.length || 0) + (visitorTeam?.players?.length || 0)}`, 'data');
-      
-      // Detailed data preview for the user
-      if (!prdMode) {
-        const samplePlayers = localTeam?.players?.slice(0, 3).map((p: any) => `${p.name} (#${p.dorsal})`).join(', ');
-        addLog(`- Preview Jugadores Local: ${samplePlayers}...`, 'data');
-        addLog(`- Eventos de juego: ${movesCount} detectados.`, 'data');
-        addLog(`✅ EXTRACCIÓN COMPLETADA. Los datos anteriores son un resumen de lo que se subiría a Supabase.`, 'success');
-        addLog(`⚠️ LLAMADA A BASE DE DATOS OMITIDA (Estás en modo simulación).`, 'info');
-      } else {
-        addLog(`⏳ Iniciando transacciones en Supabase...`, 'info');
+  const syncJob = (updatedJob: MatchJob) => {
+    setJobs(prev => {
+      const existing = prev.find(job => job.id === updatedJob.id);
+      if (!existing) {
+        return [...prev, updatedJob];
       }
-      
-      await uploadMatchToSupabase(statsData, movesData, metadata, jornadaNumToUse, prdMode, addLog);
-
-      // Update UI
-      setJobs(prev => prev.map(j => j.id === job.id ? { 
-        ...j, 
-        status: ScrapeStatus.COMPLETED 
-      } : j));
-
-      addLog(`Partido ${job.id} procesado correctamente (${prdMode ? 'PRD' : 'Simulación'}).`, 'success');
-      return true;
-
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      addLog(`Error en partido ${job.id}: ${errorMsg}`, 'error');
-      console.error(error);
-      setJobs(prev => prev.map(j => j.id === job.id ? { 
-        ...j, 
-        status: ScrapeStatus.ERROR,
-        error: errorMsg 
-      } : j));
-      return false;
-    }
-  }, []);
+      return prev.map(job => job.id === updatedJob.id ? updatedJob : job);
+    });
+  };
 
   const handleStart = async () => {
     addLog(`[UI] Iniciando procesamiento de lista de URLs...`, 'info');
-    
-    // Split URLs by newline or comma and clean them up
-    const urls = inputUrls.split(/[\n,]+/).map(u => u.trim()).filter(u => u.length > 0);
-    
+
+    const urls = normalizeImportUrls(inputUrls);
+
     if (urls.length === 0) {
       setStatusMessage("No se han proporcionado URLs válidas.");
       addLog(`❌ No hay URLs para procesar.`, 'error');
@@ -154,8 +79,7 @@ const App: React.FC = () => {
 
     setIsProcessing(true);
     setStatusMessage(`Preparando ${urls.length} partidos...`);
-    
-    // Create initial jobs
+
     const initialJobs: MatchJob[] = urls.map((url, index) => {
       const id = extractMatchId(url);
       return {
@@ -173,44 +97,45 @@ const App: React.FC = () => {
 
     const metadata: UploadMetadata = { temporada, categoria, competicion };
     const manualJornadaNum = jornada !== "" ? Number(jornada) : null;
-    
-    // Process sequentially
-    for (let i = 0; i < initialJobs.length; i++) {
-      const job = initialJobs[i];
-      
-      if (job.id.startsWith('unknown')) {
-        addLog(`Saltando URL inválida: ${job.url}`, 'error');
-        setJobs(prev => prev.map(j => j.id === job.id ? { ...j, status: ScrapeStatus.ERROR, error: "URL Inválida" } : j));
-        continue;
-      }
 
-      setStatusMessage(`Procesando ${i + 1} de ${initialJobs.length}...`);
-      await processJob(job, metadata, isPrd, manualJornadaNum);
-      
-      // Small delay between matches to avoid rate limiting
-      if (i < initialJobs.length - 1) {
-        await delay(1000);
+    try {
+      await runImportBatch({
+        urls,
+        metadata,
+        isPrd,
+        manualJornada: manualJornadaNum,
+        onLog: addLog,
+        onJobUpdate: syncJob,
+        onStatusChange: setStatusMessage
+      });
+    } finally {
+      setIsProcessing(false);
+      if (isPrd) {
+        loadMasters(true);
       }
-    }
-    
-    setStatusMessage(`Finalizado. ${initialJobs.length} URLs procesadas.`);
-    setIsProcessing(false);
-    
-    // Refresh masters in case new ones were added
-    if (isPrd) {
-      loadMasters();
     }
   };
 
   const handleRetry = async (job: MatchJob) => {
     if (isProcessing) return;
-    
+
     setIsProcessing(true);
     const metadata: UploadMetadata = { temporada, categoria, competicion };
     const manualJornadaNum = jornada !== "" ? Number(jornada) : null;
-    
-    await processJob(job, metadata, isPrd, manualJornadaNum);
-    setIsProcessing(false);
+
+    try {
+      await runImportBatch({
+        urls: [job.url],
+        metadata,
+        isPrd,
+        manualJornada: manualJornadaNum,
+        onLog: addLog,
+        onJobUpdate: syncJob,
+        onStatusChange: setStatusMessage
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (

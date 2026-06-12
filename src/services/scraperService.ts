@@ -60,19 +60,14 @@ export const downloadJson = (data: any, filename: string) => {
 
 /**
  * PROXY STRATEGY:
- * We rotate through multiple providers to ensure we get the data.
- * REORDERED: Moved 'corsproxy.io' to the bottom as it is frequently blocked by IT filters.
+ * We rotate through browser-compatible providers to avoid relying on any local backend.
  */
-const PROXY_PROVIDERS = [
+export const PROXY_PROVIDERS = [
   {
-    name: 'local-fetcher',
-    getUrl: (target: string) => `/api/data-fetcher?url=${encodeURIComponent(target)}`,
-    isWrapped: false
-  },
-  {
-    name: 'codetabs',
-    getUrl: (target: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`,
-    isWrapped: false
+    name: 'allorigins-raw',
+    getUrl: (target: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
+    isWrapped: false,
+    timeout: 30000
   },
   {
     name: 'allorigins-wrapped',
@@ -81,10 +76,9 @@ const PROXY_PROVIDERS = [
     timeout: 30000
   },
   {
-    name: 'allorigins-raw',
-    getUrl: (target: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
-    isWrapped: false,
-    timeout: 30000
+    name: 'codetabs',
+    getUrl: (target: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`,
+    isWrapped: false
   },
   {
     name: 'cors-anywhere-mirror',
@@ -121,8 +115,7 @@ async function fetchTextWithFallback(
 
   for (const provider of PROXY_PROVIDERS) {
     try {
-      // Don't use cache buster for local fetcher to avoid triggering bot detection on some sites
-      const finalUrl = provider.name === 'local-fetcher' ? targetUrl : urlWithCacheBuster;
+      const finalUrl = urlWithCacheBuster;
       const proxyUrl = provider.getUrl(finalUrl);
       
       const attemptMsg = `Intentando vía ${provider.name} para ${targetUrl}`;
@@ -182,7 +175,8 @@ async function fetchTextWithFallback(
         if (e.name === 'AbortError') {
           throw new Error(`Timeout (15s) vía ${provider.name}`);
         }
-        throw e;
+        const detail = e instanceof TypeError ? `error de red (${e.message})` : (e.message || String(e));
+        throw new Error(`Proxy ${provider.name} falló: ${detail}`);
       }
     } catch (error: any) {
       const failMsg = `Fallo con ${provider.name}: ${error.message || error}`;
