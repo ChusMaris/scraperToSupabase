@@ -11,6 +11,7 @@ export enum ScrapeStatus {
 export interface MatchJob {
   id: string; // The mongo-like ID (e.g., 696b6acdd2a7ac0001714803)
   url: string; // The full stat page URL
+  manualJornadaOverride?: number | null;
   status: ScrapeStatus;
   statsFileDownloaded: boolean;
   movesFileDownloaded: boolean;

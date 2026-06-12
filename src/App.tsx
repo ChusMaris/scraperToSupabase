@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { MatchJob, ScrapeStatus, extractMatchId } from './types';
 import { UploadMetadata, fetchCategorias, fetchTemporadas, fetchCompeticiones } from './services/supabaseService';
-import { normalizeImportUrls, runImportBatch } from './services/importService';
+import { parseImportUrlEntries, runImportBatch } from './services/importService';
 import JobCard from './components/JobCard';
 import { PlayIcon, DownloadIcon, Spinner } from './components/Icon';
 
@@ -69,7 +69,15 @@ const App: React.FC = () => {
   const handleStart = async () => {
     addLog(`[UI] Iniciando procesamiento de lista de URLs...`, 'info');
 
-    const urls = normalizeImportUrls(inputUrls);
+    const parsedUrls = parseImportUrlEntries(inputUrls);
+    const urls = parsedUrls.entries;
+
+    if (parsedUrls.errors.length > 0) {
+      parsedUrls.errors.forEach(error => {
+        addLog(`Linea ${error.lineNumber}: ${error.reason} -> ${error.rawLine.trim()}`, 'error');
+      });
+      addLog(`Se omitieron ${parsedUrls.errors.length} linea(s) con formato invalido.`, 'info');
+    }
 
     if (urls.length === 0) {
       setStatusMessage("No se han proporcionado URLs válidas.");
@@ -80,11 +88,12 @@ const App: React.FC = () => {
     setIsProcessing(true);
     setStatusMessage(`Preparando ${urls.length} partidos...`);
 
-    const initialJobs: MatchJob[] = urls.map((url, index) => {
-      const id = extractMatchId(url);
+    const initialJobs: MatchJob[] = urls.map((entry, index) => {
+      const id = extractMatchId(entry.url);
       return {
         id: id || `unknown-${index}`,
-        url,
+        url: entry.url,
+        manualJornadaOverride: entry.manualJornadaOverride ?? null,
         status: ScrapeStatus.IDLE,
         statsFileDownloaded: false,
         movesFileDownloaded: false,
@@ -100,7 +109,8 @@ const App: React.FC = () => {
 
     try {
       await runImportBatch({
-        urls,
+        urls: urls.map(entry => entry.url),
+        urlEntries: urls,
         metadata,
         isPrd,
         manualJornada: manualJornadaNum,
@@ -126,6 +136,7 @@ const App: React.FC = () => {
     try {
       await runImportBatch({
         urls: [job.url],
+        urlEntries: [{ url: job.url, lineNumber: 1, manualJornadaOverride: job.manualJornadaOverride ?? null }],
         metadata,
         isPrd,
         manualJornada: manualJornadaNum,
@@ -234,13 +245,13 @@ const App: React.FC = () => {
           {/* URL Input (Textarea for multiple) */}
           <div>
             <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-              Lista de URLs de Estadísticas (Una por línea)
+              Lista de URLs de Estadísticas (una por linea)
             </label>
             <textarea 
               value={inputUrls}
               onChange={(e) => setInputUrls(e.target.value)}
               disabled={isProcessing}
-              placeholder="Pega aquí los enlaces de los partidos..."
+              placeholder="Formato: https://... o jornada;https://... (una entrada por linea)"
               className="w-full h-32 bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-basketball-500 disabled:opacity-50 font-mono text-xs resize-none"
             />
           </div>

@@ -43,6 +43,21 @@ Para publicar:
 npm run deploy
 ```
 
+## 🧾 Formato de entrada de URLs
+
+En la caja de URLs puedes mezclar estos dos formatos (una entrada por linea):
+
+- `https://www.basquetcatala.cat/estadistiques/<match-id>`
+- `jornada;https://www.basquetcatala.cat/estadistiques/<match-id>`
+
+Regla de precedencia de jornada:
+
+- Si una linea incluye `jornada;url`, se usa esa jornada para esa URL.
+- Si una linea solo tiene URL, se usa el campo global "Numero de Jornada" (si esta informado).
+- Si no hay jornada por linea ni global, se intenta usar la jornada extraida del JSON del partido.
+
+Las lineas vacias se ignoran y las lineas con formato invalido se reportan en los logs con numero de linea.
+
 ## 🛠 Estructura del proyecto
 
 - `src/App.tsx`: componente principal de la interfaz.

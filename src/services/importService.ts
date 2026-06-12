@@ -4,6 +4,7 @@ import { uploadMatchToSupabase, UploadMetadata } from './supabaseService';
 
 export interface ImportBatchRequest {
   urls: string[];
+  urlEntries?: ImportUrlEntry[];
   metadata: UploadMetadata;
   isPrd?: boolean;
   manualJornada?: number | null;
@@ -16,11 +17,138 @@ export interface ImportBatchResult extends MatchJob {
   error?: string;
 }
 
+export interface ImportUrlEntry {
+  url: string;
+  lineNumber: number;
+  manualJornadaOverride?: number | null;
+}
+
+export interface ImportUrlParseError {
+  lineNumber: number;
+  rawLine: string;
+  reason: string;
+}
+
+export interface ImportUrlParseResult {
+  entries: ImportUrlEntry[];
+  errors: ImportUrlParseError[];
+}
+
+const isValidHttpUrl = (value: string): boolean => {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+export const parseImportUrlEntries = (input: string): ImportUrlParseResult => {
+  const lines = input.split('\n');
+  const entries: ImportUrlEntry[] = [];
+  const errors: ImportUrlParseError[] = [];
+
+  lines.forEach((rawLine, index) => {
+    const lineNumber = index + 1;
+    const trimmedLine = rawLine.trim();
+
+    if (!trimmedLine) {
+      return;
+    }
+
+    const candidates = trimmedLine.includes(';')
+      ? [trimmedLine]
+      : trimmedLine.split(',').map(chunk => chunk.trim()).filter(Boolean);
+
+    candidates.forEach(candidate => {
+      if (candidate.includes(';')) {
+        const parts = candidate.split(';').map(part => part.trim());
+
+        if (parts.length !== 2) {
+          errors.push({
+            lineNumber,
+            rawLine,
+            reason: 'Formato invalido. Usa jornada;url con un unico punto y coma.'
+          });
+          return;
+        }
+
+        const [jornadaPart, urlPart] = parts;
+
+        if (!/^\d+$/.test(jornadaPart) || Number(jornadaPart) <= 0) {
+          errors.push({
+            lineNumber,
+            rawLine,
+            reason: 'Jornada invalida. Debe ser un entero positivo.'
+          });
+          return;
+        }
+
+        if (!urlPart) {
+          errors.push({
+            lineNumber,
+            rawLine,
+            reason: 'Falta la URL despues del delimitador.'
+          });
+          return;
+        }
+
+        if (!isValidHttpUrl(urlPart)) {
+          errors.push({
+            lineNumber,
+            rawLine,
+            reason: 'URL invalida. Debe empezar por http:// o https://.'
+          });
+          return;
+        }
+
+        entries.push({
+          url: urlPart,
+          lineNumber,
+          manualJornadaOverride: Number(jornadaPart)
+        });
+        return;
+      }
+
+      if (!isValidHttpUrl(candidate)) {
+        errors.push({
+          lineNumber,
+          rawLine,
+          reason: 'URL invalida. Debe empezar por http:// o https://.'
+        });
+        return;
+      }
+
+      entries.push({
+        url: candidate,
+        lineNumber,
+        manualJornadaOverride: null
+      });
+    });
+  });
+
+  return { entries, errors };
+};
+
 export const normalizeImportUrls = (input: string): string[] => {
-  return input
-    .split(/[\n,]+/)
-    .map(url => url.trim())
-    .filter(url => url.length > 0);
+  return parseImportUrlEntries(input).entries.map(entry => entry.url);
+};
+
+export const resolveJornadaForJob = (
+  lineMatchday: number | null | undefined,
+  manualJornada: number | null,
+  extractedJornada: number | null
+): { value: number | null; source: 'line' | 'manual' | 'extracted' | 'none' } => {
+  if (lineMatchday !== null && lineMatchday !== undefined) {
+    return { value: lineMatchday, source: 'line' };
+  }
+  if (manualJornada !== null && manualJornada !== undefined) {
+    return { value: manualJornada, source: 'manual' };
+  }
+  if (extractedJornada !== null && extractedJornada !== undefined) {
+    return { value: extractedJornada, source: 'extracted' };
+  }
+  return { value: null, source: 'none' };
 };
 
 export const getMatchScorePreview = (mainJson: any): string => {
@@ -40,12 +168,13 @@ export const getMatchScorePreview = (mainJson: any): string => {
   return `${teamScore}-${oppScore}`;
 };
 
-const buildInitialJobs = (urls: string[]): MatchJob[] => {
-  return urls.map((url, index) => {
-    const id = extractMatchId(url);
+const buildInitialJobs = (urlEntries: ImportUrlEntry[]): MatchJob[] => {
+  return urlEntries.map((entry, index) => {
+    const id = extractMatchId(entry.url);
     return {
       id: id || `unknown-${index}`,
-      url,
+      url: entry.url,
+      manualJornadaOverride: entry.manualJornadaOverride ?? null,
       status: ScrapeStatus.IDLE,
       statsFileDownloaded: false,
       movesFileDownloaded: false,
@@ -108,8 +237,16 @@ const processSingleJob = async (
     log(`- Resultado final: ${score}`, 'data');
 
     const extractedJornada = statsData.jornada || (statsData.match && statsData.match.jornada) || null;
-    const jornadaNumToUse = manualJornada !== null ? manualJornada : extractedJornada;
-    log(`- Jornada: ${jornadaNumToUse} ${manualJornada !== null ? '(Manual)' : '(Extraída)'}`, 'data');
+    const resolvedJornada = resolveJornadaForJob(job.manualJornadaOverride, manualJornada, extractedJornada);
+    const jornadaNumToUse = resolvedJornada.value;
+    const sourceLabel = resolvedJornada.source === 'line'
+      ? 'Linea'
+      : resolvedJornada.source === 'manual'
+      ? 'Manual'
+      : resolvedJornada.source === 'extracted'
+      ? 'Extraida'
+      : 'No definida';
+    log(`- Jornada: ${jornadaNumToUse ?? '-'} (${sourceLabel})`, 'data');
     log(`- Jugadores encontrados: ${(localTeam?.players?.length || 0) + (visitorTeam?.players?.length || 0)}`, 'data');
 
     if (!prdMode) {
@@ -144,6 +281,7 @@ const processSingleJob = async (
 
 export const runImportBatch = async ({
   urls,
+  urlEntries,
   metadata,
   isPrd = false,
   manualJornada = null,
@@ -151,15 +289,20 @@ export const runImportBatch = async ({
   onJobUpdate,
   onStatusChange
 }: ImportBatchRequest): Promise<ImportBatchResult[]> => {
-  const normalizedUrls = urls.filter(url => url?.trim().length);
+  const normalizedUrlEntries =
+    urlEntries && urlEntries.length > 0
+      ? urlEntries.filter(entry => entry.url?.trim().length)
+      : urls
+          .filter(url => url?.trim().length)
+          .map((url, index) => ({ url, lineNumber: index + 1, manualJornadaOverride: null }));
 
-  if (normalizedUrls.length === 0) {
+  if (normalizedUrlEntries.length === 0) {
     throw new Error('No se han proporcionado URLs válidas.');
   }
 
-  if (onStatusChange) onStatusChange(`Preparando ${normalizedUrls.length} partidos...`);
+  if (onStatusChange) onStatusChange(`Preparando ${normalizedUrlEntries.length} partidos...`);
 
-  const initialJobs = buildInitialJobs(normalizedUrls);
+  const initialJobs = buildInitialJobs(normalizedUrlEntries);
   initialJobs.forEach(job => onJobUpdate?.(job));
 
   const results: ImportBatchResult[] = [];
