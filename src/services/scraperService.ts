@@ -64,6 +64,11 @@ export const downloadJson = (data: any, filename: string) => {
  */
 export const PROXY_PROVIDERS = [
   {
+    name: 'corsproxy.io',
+    getUrl: (target: string) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
+    isWrapped: false
+  },
+  {
     name: 'allorigins-raw',
     getUrl: (target: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
     isWrapped: false,
@@ -93,11 +98,6 @@ export const PROXY_PROVIDERS = [
   {
     name: 'thingproxy',
     getUrl: (target: string) => `https://thingproxy.freeboard.io/fetch/${target}`,
-    isWrapped: false
-  },
-  {
-    name: 'corsproxy.io',
-    getUrl: (target: string) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
     isWrapped: false
   }
 ];

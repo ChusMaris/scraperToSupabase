@@ -5,13 +5,13 @@ import { normalizeImportUrls, runImportBatch } from './services/importService';
 import JobCard from './components/JobCard';
 import { PlayIcon, DownloadIcon, Spinner } from './components/Icon';
 
-const DEFAULT_SINGLE_URL = "https://www.basquetcatala.cat/estadistiques/2025/69be6122176daf00014ee3ab";
+const DEFAULT_SINGLE_URL = "";
 
 const App: React.FC = () => {
   const [inputUrls, setInputUrls] = useState(DEFAULT_SINGLE_URL);
   const [temporada, setTemporada] = useState("2025/26");
-  const [categoria, setCategoria] = useState("C.t. Pre-infantil Masculí");
-  const [competicion, setCompeticion] = useState("Segona Fase - Nivell B1 - 04");
+  const [categoria, setCategoria] = useState("");
+  const [competicion, setCompeticion] = useState("");
   const [jornada, setJornada] = useState<number | "">("");
   const [isPrd, setIsPrd] = useState(false);
   const [jobs, setJobs] = useState<MatchJob[]>([]);
