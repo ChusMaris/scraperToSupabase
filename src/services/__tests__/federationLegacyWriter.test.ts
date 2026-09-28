@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 import { normalizeFederationMatch } from '../federationNormalizer';
-import { persistFederationMatchToLegacy } from '../federationLegacyWriter';
+import { persistFederationMatchToLegacy, toLegacyBigintId } from '../federationLegacyWriter';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -69,7 +69,9 @@ test('persists the normalized match only through existing legacy tables', async 
   );
 
   const writtenTables = new Set(operations.map(operation => operation.table));
-  assert.equal(result.externalMatchId, '95332c8d-eefc-43ed-ac9a-d9af7d4f926d');
+  assert.equal(result.sourceMatchId, '95332c8d-eefc-43ed-ac9a-d9af7d4f926d');
+  assert.match(result.externalMatchId, /^\d+$/);
+  assert.equal(result.externalMatchId, toLegacyBigintId(result.sourceMatchId));
   assert.equal(result.seasonName, '2026/27');
   assert.equal(writtenTables.has('temporadas'), true);
   assert.equal(writtenTables.has('categorias'), true);
@@ -84,10 +86,21 @@ test('persists the normalized match only through existing legacy tables', async 
 
   const matchWrite = operations.find(operation => operation.table === 'partidos' && operation.method === 'upsert');
   assert.equal(matchWrite?.value.jornada, 7);
+  assert.equal(matchWrite?.value.id_match_extern, result.externalMatchId);
   assert.equal(matchWrite?.value.puntos_local, normalized.match.finalScoreLocal);
   assert.equal(matchWrite?.value.puntos_visitante, normalized.match.finalScoreVisitor);
 
   const teamWrites = operations.filter(operation => operation.table === 'equipos' && operation.method === 'upsert');
   assert.equal(teamWrites.length, 2);
   assert.equal(teamWrites.every(operation => !('team_id_intern_fce' in operation.value)), true);
+});
+
+test('keeps legacy numeric match IDs intact and hashes UUIDs deterministically', () => {
+  const uuid = 'e1d84c8f-dcf4-4840-8c59-b161140248ee';
+  const hashedId = toLegacyBigintId(uuid);
+
+  assert.equal(toLegacyBigintId('20170042'), '20170042');
+  assert.equal(toLegacyBigintId(uuid), hashedId);
+  assert.match(hashedId, /^\d+$/);
+  assert.ok(BigInt(hashedId) <= 9_223_372_036_854_775_807n);
 });

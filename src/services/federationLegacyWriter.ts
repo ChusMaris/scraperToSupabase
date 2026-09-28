@@ -10,6 +10,23 @@ const slugFromText = (value: string): string => {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'entity';
 };
 
+export const toLegacyBigintId = (sourceId: string): string => {
+  const maximumBigint = 9_223_372_036_854_775_807n;
+  if (/^\d+$/.test(sourceId)) {
+    const numericId = BigInt(sourceId);
+    if (numericId <= maximumBigint) return numericId.toString();
+  }
+
+  let hash = 14_695_981_039_346_656_037n;
+  for (let index = 0; index < sourceId.length; index += 1) {
+    hash ^= BigInt(sourceId.charCodeAt(index));
+    hash = (hash * 1_099_511_628_211n) & 0xffff_ffff_ffff_ffffn;
+  }
+
+  const syntheticId = (hash & ((1n << 61n) - 1n)) | (1n << 62n);
+  return syntheticId.toString();
+};
+
 const throwOnError = (label: string, error: { message: string } | null) => {
   if (error) {
     throw new Error(`${label}: ${error.message}`);
@@ -79,14 +96,15 @@ export const persistFederationMatchToLegacy = async (
     throw new Error('El partido no contiene los dos equipos necesarios para persistirlo.');
   }
 
-  const externalMatchId = normalized.match.externalMatchUuid
+  const sourceMatchId = normalized.match.externalMatchUuid
     ?? sourceUrl?.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0]
     ?? `match-${slugFromText(`${normalized.match.localTeamName}-${normalized.match.visitorTeamName}-${normalized.match.date ?? 'unknown-date'}`)}`;
+  const legacyMatchId = toLegacyBigintId(sourceMatchId);
   const matchDate = normalized.match.date && Number.isFinite(new Date(normalized.match.date).getTime())
     ? new Date(normalized.match.date).toISOString()
     : null;
   const match = await upsertOne(database, 'partidos', {
-    id_match_extern: externalMatchId,
+    id_match_extern: legacyMatchId,
     competicion_id: competitionResult.id,
     equipo_local_id: teamIds.get(localTeam.id),
     equipo_visitante_id: teamIds.get(visitorTeam.id),
@@ -261,10 +279,11 @@ export const persistFederationMatchToLegacy = async (
     throwOnError('Movimientos del partido', error);
   }
 
-  log(`Partido ${externalMatchId} guardado en las tablas legacy`, 'success');
+  log(`Partido ${sourceMatchId} guardado con clave legacy ${legacyMatchId}`, 'success');
   return {
     matchId: match.id,
-    externalMatchId,
+    sourceMatchId,
+    externalMatchId: legacyMatchId,
     seasonName: metadata.temporada,
     categoryName: metadata.categoria,
     competitionName: metadata.competicion,
