@@ -3,11 +3,20 @@ const pickFromWindow = () => {
   const scope = window;
 
   for (const key of Object.keys(scope)) {
-    const value = scope[key];
+    let value;
+    try {
+      value = scope[key];
+    } catch {
+      continue;
+    }
     if (!value || typeof value !== 'object') continue;
 
-    if (value.header || value.boxscore || value.scoreEvolution || value.playByPlay || value.shotChart) {
-      candidates.push(value);
+    try {
+      if (value.header || value.boxscore || value.scoreEvolution || value.playByPlay || value.shotChart) {
+        candidates.push(value);
+      }
+    } catch {
+      continue;
     }
   }
 
@@ -21,8 +30,13 @@ const pickFromWindow = () => {
   ];
 
   for (const key of globalKeys) {
-    if (window[key] && typeof window[key] === 'object') {
-      candidates.push(window[key]);
+    try {
+      const value = window[key];
+      if (value && typeof value === 'object') {
+        candidates.push(value);
+      }
+    } catch {
+      continue;
     }
   }
 
@@ -33,8 +47,14 @@ const findPayload = () => {
   const windowObjects = pickFromWindow();
 
   for (const candidate of windowObjects) {
-    const hasStats = !!candidate?.header || !!candidate?.boxscore || !!candidate?.shotChart || !!candidate?.scoreEvolution;
-    const hasPbp = !!candidate?.playByPlay || Array.isArray(candidate?.movements) || Array.isArray(candidate?.plays);
+    let hasStats;
+    let hasPbp;
+    try {
+      hasStats = !!candidate?.header || !!candidate?.boxscore || !!candidate?.shotChart || !!candidate?.scoreEvolution;
+      hasPbp = !!candidate?.playByPlay || Array.isArray(candidate?.movements) || Array.isArray(candidate?.plays);
+    } catch {
+      continue;
+    }
 
     if (hasStats || hasPbp) {
       return candidate;
@@ -56,29 +76,63 @@ const findPayload = () => {
   return null;
 };
 
-const sendPayloadToBackground = async (payload) => {
+const sanitizeForMessage = (value, seen = new WeakSet()) => {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'function') return '[Function]';
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (value instanceof RegExp) {
+    return value.toString();
+  }
+
+  if (typeof value === 'object') {
+    if (seen.has(value)) {
+      return '[Circular]';
+    }
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      return value.map(item => sanitizeForMessage(item, seen));
+    }
+
+    const cleaned = {};
+    for (const [key, nestedValue] of Object.entries(value)) {
+      if (key === 'window' || key === 'document' || key === 'parent' || key === 'top' || key === 'self') {
+        continue;
+      }
+      cleaned[key] = sanitizeForMessage(nestedValue, seen);
+    }
+    return cleaned;
+  }
+
+  return String(value);
+};
+
+const sendPayloadToBackground = (payload) => new Promise((resolve) => {
+  const safePayload = sanitizeForMessage({
+    statsPayload: payload,
+    pbpPayload: payload,
+    sourceUrl: window.location.href,
+    capturedAt: new Date().toISOString()
+  });
+
   chrome.runtime.sendMessage({
     type: 'FEDERATION_PAYLOAD',
-    payload: {
-      statsPayload: payload,
-      pbpPayload: payload,
-      sourceUrl: window.location.href,
-      capturedAt: new Date().toISOString()
-    }
+    payload: safePayload
   }, (response) => {
     if (chrome.runtime.lastError) {
-      console.error('[extension] Runtime error:', chrome.runtime.lastError.message);
+      resolve({ ok: false, error: chrome.runtime.lastError.message });
       return;
     }
 
-    if (!response?.ok) {
-      console.error('[extension] Import failed:', response?.error || 'Unknown error');
-      return;
-    }
-
-    console.log('[extension] Import successful:', response.result);
+    resolve(response ?? { ok: false, error: 'The API did not return an import result.' });
   });
-};
+});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== 'CAPTURE_FEDERATION_PAYLOAD') {
@@ -93,6 +147,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
 
-  sendPayloadToBackground(payload);
-  sendResponse({ ok: true, message: 'Payload detected and forwarded.' });
+  const metadata = message.metadata || {};
+
+  sendPayloadToBackground({
+    ...payload,
+    metadata
+  }).then(sendResponse).catch((error) => {
+    sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) });
+  });
+  return true;
 });

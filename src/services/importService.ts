@@ -262,7 +262,11 @@ const processSingleJob = async (
 
     if (prdMode && isFederationPayload(statsData)) {
       log('✅ Payload federativo detectado. Usando normalización canonical para persistencia.', 'success');
-      await upsertFederationMatchToSupabase(statsData, movesData, log);
+      await upsertFederationMatchToSupabase(statsData, movesData, log, {
+        metadata,
+        jornada: jornadaNumToUse,
+        sourceUrl: job.url
+      });
     } else {
       await uploadMatchToSupabase(statsData, movesData, metadata, jornadaNumToUse, prdMode, log);
     }

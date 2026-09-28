@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = 'http://localhost:4000/api/federation/import';
+const DEFAULT_API_URL = 'https://scrapertosupabase.onrender.com/api/federation/import';
 
 const getApiUrl = async () => {
   const result = await chrome.storage.local.get(['federationApiUrl']);
@@ -23,6 +23,19 @@ const sendImport = async (payload) => {
   return response.json();
 };
 
+const getImportOptions = async () => {
+  const apiUrl = await getApiUrl();
+  const optionsUrl = apiUrl.replace(/\/import\/?$/, '/options');
+  const response = await fetch(optionsUrl);
+  const data = await response.json().catch(() => ({ error: 'Unknown API error' }));
+
+  if (!response.ok) {
+    throw new Error(data.error || `API error ${response.status}`);
+  }
+
+  return data.options;
+};
+
 chrome.action.onClicked.addListener(async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -35,6 +48,13 @@ chrome.action.onClicked.addListener(async () => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === 'GET_FEDERATION_OPTIONS') {
+    getImportOptions()
+      .then(options => sendResponse({ ok: true, options }))
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   if (message?.type !== 'FEDERATION_PAYLOAD') {
     return;
   }

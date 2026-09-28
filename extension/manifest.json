@@ -26,6 +26,7 @@
     }
   ],
   "action": {
-    "default_title": "Importar partit"
+    "default_title": "Importar partit",
+    "default_popup": "popup.html"
   }
 }

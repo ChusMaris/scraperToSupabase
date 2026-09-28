@@ -31,6 +31,16 @@ npm start
 
 ## Endpoint
 
+The extension loads its editable catalog suggestions from the existing legacy tables through:
+
+```http
+GET /api/federation/options
+```
+
+This reads `temporadas`, `categorias`, `competiciones`, and `partidos` from the existing database.
+
+Federation imports are normalized and persisted to the existing legacy tables. No additional tables or SQL migration are required.
+
 ```http
 POST /api/federation/import
 Content-Type: application/json

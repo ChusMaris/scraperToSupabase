@@ -84,6 +84,7 @@ export interface FederationTeamStatRecord {
 }
 
 export interface FederationPlayerStatRecord {
+  period: number;
   teamId: string;
   playerId: string;
   playerName: string;
@@ -327,6 +328,7 @@ export const normalizeFederationMatch = (
           const comp = player.computed ?? {};
           const adv = player.advanced ?? {};
           playerStats.push({
+            period: Number(boxscoreEntry.period ?? 0),
             teamId,
             playerId,
             playerName: player.name ?? 'Unknown player',
