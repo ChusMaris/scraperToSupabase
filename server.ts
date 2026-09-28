@@ -6,8 +6,44 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function startServer(port = Number(process.env.PORT || 3000)) {
+async function startServer(port = Number(process.env.PORT || 3010)) {
   const app = express();
+
+  app.get('/api/proxy', async (req, res) => {
+    const rawUrl = req.query.url;
+
+    if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
+      res.status(400).json({ error: 'Missing url query parameter.' });
+      return;
+    }
+
+    try {
+      const targetUrl = decodeURIComponent(rawUrl);
+      const parsedTarget = new URL(targetUrl);
+
+      if (!['http:', 'https:'].includes(parsedTarget.protocol)) {
+        throw new Error('Only http and https targets are allowed.');
+      }
+
+      const response = await fetch(targetUrl, {
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          'User-Agent': 'Mozilla/5.0 (compatible; ScraperProxy/1.0)'
+        },
+        redirect: 'follow'
+      });
+
+      const responseText = await response.text();
+      const contentType = response.headers.get('content-type') ?? 'application/json';
+      res.status(response.status);
+      res.setHeader('Content-Type', contentType);
+      res.send(responseText);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown proxy error';
+      console.error('Local proxy error:', message);
+      res.status(502).json({ error: message });
+    }
+  });
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

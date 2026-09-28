@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { getMatchScorePreview, parseImportUrlEntries, resolveJornadaForJob } from '../importService';
-import { PROXY_PROVIDERS } from '../scraperService';
+import { PROXY_PROVIDERS, buildFederationMatchUrls, buildLocalProxyUrl } from '../scraperService';
+import { extractMatchId } from '../../types';
 
 test('getMatchScorePreview uses the latest score from score evolution when available', () => {
   const mainJson = {
@@ -69,4 +70,30 @@ test('resolveJornadaForJob applies precedence line over global over extracted', 
   const withExtracted = resolveJornadaForJob(null, null, 9);
   assert.equal(withExtracted.value, 9);
   assert.equal(withExtracted.source, 'extracted');
+});
+
+test('extractMatchId accepts modern federation UUIDs', () => {
+  const url = 'https://www.basquetcatala.cat/estadistica/partit/e1d84c8f-dcf4-4840-8c59-b161140248ee';
+  assert.equal(extractMatchId(url), 'e1d84c8f-dcf4-4840-8c59-b161140248ee');
+});
+
+test('buildFederationMatchUrls creates the new stats and pbp endpoints from the match UUID', () => {
+  const urls = buildFederationMatchUrls('e1d84c8f-dcf4-4840-8c59-b161140248ee');
+
+  assert.equal(
+    urls.stats,
+    'https://msstats.optimalwayconsulting.com/v1/fcbq/matches/e1d84c8f-dcf4-4840-8c59-b161140248ee/stats?currentSeason=true'
+  );
+  assert.equal(
+    urls.pbp,
+    'https://msstats.optimalwayconsulting.com/v1/fcbq/matches/e1d84c8f-dcf4-4840-8c59-b161140248ee/pbp?currentSeason=true'
+  );
+});
+
+test('buildLocalProxyUrl points the browser to the local server proxy to bypass CORS and public proxy blocks', () => {
+  const target = 'https://msstats.optimalwayconsulting.com/v1/fcbq/matches/uuid/stats?currentSeason=true';
+  assert.equal(
+    buildLocalProxyUrl(target),
+    '/api/proxy?url=https%3A%2F%2Fmsstats.optimalwayconsulting.com%2Fv1%2Ffcbq%2Fmatches%2Fuuid%2Fstats%3FcurrentSeason%3Dtrue'
+  );
 });

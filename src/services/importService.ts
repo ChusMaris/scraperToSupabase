@@ -1,5 +1,6 @@
 import { MatchJob, ScrapeStatus, extractMatchId } from '../types';
 import { delay, fetchMatchData } from './scraperService';
+import { upsertFederationMatchToSupabase, isFederationPayload } from './federationPersistence';
 import { uploadMatchToSupabase, UploadMetadata } from './supabaseService';
 
 export interface ImportBatchRequest {
@@ -259,7 +260,12 @@ const processSingleJob = async (
       log('⏳ Iniciando transacciones en Supabase...', 'info');
     }
 
-    await uploadMatchToSupabase(statsData, movesData, metadata, jornadaNumToUse, prdMode, log);
+    if (prdMode && isFederationPayload(statsData)) {
+      log('✅ Payload federativo detectado. Usando normalización canonical para persistencia.', 'success');
+      await upsertFederationMatchToSupabase(statsData, movesData, log);
+    } else {
+      await uploadMatchToSupabase(statsData, movesData, metadata, jornadaNumToUse, prdMode, log);
+    }
 
     const completedJob = { ...currentJob, status: ScrapeStatus.COMPLETED };
     updateJob(completedJob);

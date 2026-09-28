@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "BasquetCatala Federation Importer",
+  "version": "0.1.0",
+  "description": "Captura els JSON de stats i play-by-play d'un partit i els envia a l'API de normalització.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Importar partit"
+  }
+}

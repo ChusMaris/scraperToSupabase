@@ -59,10 +59,25 @@ export const downloadJson = (data: any, filename: string) => {
 };
 
 /**
+ * Creates the same-origin proxy URL used by the local Express server.
+ * This is the most reliable option for browser-based federation requests because it
+ * avoids the public proxy blocks that return 403/timeout for these APIs.
+ */
+export const buildLocalProxyUrl = (target: string): string => {
+  return `/api/proxy?url=${encodeURIComponent(target)}`;
+};
+
+/**
  * PROXY STRATEGY:
- * We rotate through browser-compatible providers to avoid relying on any local backend.
+ * Prefer the local app proxy first, then fall back to external public providers.
  */
 export const PROXY_PROVIDERS = [
+  {
+    name: 'local-proxy',
+    getUrl: (target: string) => buildLocalProxyUrl(target),
+    isWrapped: false,
+    timeout: 30000
+  },
   {
     name: 'corsproxy.io',
     getUrl: (target: string) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
@@ -110,7 +125,26 @@ async function fetchTextWithFallback(
   onLog?: (msg: string, type: any) => void
 ): Promise<{ text: string, proxy: string }> {
   const urlWithCacheBuster = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}__t=${Date.now()}`;
-  
+
+  if (typeof window !== 'undefined') {
+    try {
+      const localUrl = buildLocalProxyUrl(urlWithCacheBuster);
+      const response = await fetch(localUrl, { headers: { Accept: 'application/json, text/plain, */*' } });
+
+      if (response.ok) {
+        const text = await response.text();
+        if (text && text.trim().length > 0) {
+          if (onLog) onLog('✅ Éxito usando proxy local', 'success');
+          return { text, proxy: 'local-proxy' };
+        }
+      }
+    } catch (error) {
+      const failMsg = `Fallo con proxy local: ${error instanceof Error ? error.message : String(error)}`;
+      console.warn(failMsg);
+      if (onLog) onLog(failMsg, 'error');
+    }
+  }
+
   let lastError: any = null;
 
   for (const provider of PROXY_PROVIDERS) {
@@ -225,26 +259,45 @@ export const fetchResultsPage = async (pageUrl: string, onLog?: (msg: string, ty
 };
 
 /**
+ * Builds the modern federation API URLs used by the new provider payloads.
+ */
+export const buildFederationMatchUrls = (matchId: string): { stats: string; pbp: string } => {
+  const normalizedMatchId = (matchId ?? '').trim();
+  if (!normalizedMatchId) {
+    throw new Error('Match ID is required to build federation URLs.');
+  }
+
+  const matchesBase = 'https://msstats.optimalwayconsulting.com/v1/fcbq/matches';
+  return {
+    stats: `${matchesBase}/${normalizedMatchId}/stats?currentSeason=true`,
+    pbp: `${matchesBase}/${normalizedMatchId}/pbp?currentSeason=true`
+  };
+};
+
+/**
  * Fetches the specific JSON data for a match using the API.
  */
 export const fetchMatchData = async (
-  matchId: string, 
-  type: 'stats' | 'moves',
+  matchId: string,
+  type: 'stats' | 'moves' | 'pbp',
   onLog?: (msg: string, type: any) => void
 ): Promise<any> => {
-  const API_BASE = "https://msstats.optimalwayconsulting.com/v1/fcbq";
-  const endpoint = type === 'stats' ? 'getJsonWithMatchStats' : 'getJsonWithMatchMoves';
-  
-  const targetUrl = `${API_BASE}/${endpoint}/${matchId}`;
-  
+  const API_BASE = 'https://msstats.optimalwayconsulting.com/v1/fcbq';
+  const isModernFederationId = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(matchId);
+
+  const modernUrl = buildFederationMatchUrls(matchId);
+  const targetUrl = isModernFederationId
+    ? (type === 'stats' ? modernUrl.stats : modernUrl.pbp)
+    : `${API_BASE}/${type === 'stats' ? 'getJsonWithMatchStats' : 'getJsonWithMatchMoves'}/${matchId}`;
+
   try {
     const { text: jsonString } = await fetchTextWithFallback(targetUrl, onLog);
-    
+
     try {
       return JSON.parse(jsonString);
     } catch (e) {
       console.error(`Failed to parse JSON for ${type}.`, e);
-      throw new Error("Invalid JSON response from server");
+      throw new Error('Invalid JSON response from server');
     }
   } catch (error) {
     console.error(`Error fetching ${type} for ${matchId}:`, error);
