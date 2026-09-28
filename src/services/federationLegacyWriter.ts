@@ -61,11 +61,12 @@ export const persistFederationMatchToLegacy = async (
       nombre_corto: team.shortName ?? null
     }, 'nombre', `Club ${team.name}`);
     const providerTeamId = team.externalUuid ?? team.id;
+    const numericProviderTeamId = /^\d+$/.test(providerTeamId) ? providerTeamId : null;
     const legacyTeam = await upsertOne(database, 'equipos', {
       club_id: club.id,
       competicion_id: competitionResult.id,
       nombre_especifico: team.name,
-      team_id_intern_fce: String(providerTeamId)
+      ...(numericProviderTeamId ? { team_id_intern_fce: numericProviderTeamId } : {})
     }, 'club_id,competicion_id', `Equipo ${team.name}`);
 
     teamIds.set(team.id, legacyTeam.id);

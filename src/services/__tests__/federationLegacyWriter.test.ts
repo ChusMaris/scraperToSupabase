@@ -86,4 +86,8 @@ test('persists the normalized match only through existing legacy tables', async 
   assert.equal(matchWrite?.value.jornada, 7);
   assert.equal(matchWrite?.value.puntos_local, normalized.match.finalScoreLocal);
   assert.equal(matchWrite?.value.puntos_visitante, normalized.match.finalScoreVisitor);
+
+  const teamWrites = operations.filter(operation => operation.table === 'equipos' && operation.method === 'upsert');
+  assert.equal(teamWrites.length, 2);
+  assert.equal(teamWrites.every(operation => !('team_id_intern_fce' in operation.value)), true);
 });
