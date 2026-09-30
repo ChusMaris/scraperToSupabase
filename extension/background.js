@@ -1,16 +1,33 @@
 const DEFAULT_API_URL = 'https://scrapertosupabase.onrender.com/api/federation/import';
+const LAST_IMPORT_STATE_KEY = 'federationLastImportState';
 
 const getApiUrl = async () => {
   const result = await chrome.storage.local.get(['federationApiUrl']);
   return result.federationApiUrl || DEFAULT_API_URL;
 };
 
-const publishImportLog = (importId, message, level = 'info') => {
+const publishImportLog = async (importId, message, level = 'info') => {
+  const stored = await chrome.storage.local.get([LAST_IMPORT_STATE_KEY]);
+  const previous = stored[LAST_IMPORT_STATE_KEY];
+  const state = previous?.importId === importId
+    ? previous
+    : { importId, status: 'running', startedAt: new Date().toISOString(), logs: [] };
+  const lastSequence = state.logs.at(-1)?.sequence ?? 0;
+  const log = {
+    sequence: lastSequence + 1,
+    timestamp: new Date().toISOString(),
+    level,
+    message
+  };
+  state.status = 'running';
+  state.updatedAt = log.timestamp;
+  state.logs = [...state.logs, log].slice(-100);
+  await chrome.storage.local.set({ [LAST_IMPORT_STATE_KEY]: state });
+
   chrome.runtime.sendMessage({
     type: 'FEDERATION_IMPORT_LOG',
     importId,
-    message,
-    level
+    log
   }, () => {
     void chrome.runtime.lastError;
   });
@@ -55,7 +72,7 @@ const sendImport = async (payload, importId) => {
 
       if (data) {
         const event = JSON.parse(data);
-        if (event.type === 'log') publishImportLog(importId, event.message, event.level);
+        if (event.type === 'log') await publishImportLog(importId, event.message, event.level);
         if (event.type === 'error') throw new Error(event.error || 'Error de importación desconocido.');
         if (event.type === 'complete') importResult = event.result;
       }
@@ -86,7 +103,15 @@ const getImportOptions = async () => {
 
 const publishImportResult = async (importId, result) => {
   const resultKey = `federationImportResult:${importId}`;
-  await chrome.storage.local.set({ [resultKey]: result });
+  const stateResult = await chrome.storage.local.get([LAST_IMPORT_STATE_KEY]);
+  const previous = stateResult[LAST_IMPORT_STATE_KEY];
+  const state = previous?.importId === importId
+    ? previous
+    : { importId, startedAt: new Date().toISOString(), logs: [] };
+  state.status = result.ok ? 'completed' : 'failed';
+  state.updatedAt = new Date().toISOString();
+  state.result = result;
+  await chrome.storage.local.set({ [resultKey]: result, [LAST_IMPORT_STATE_KEY]: state });
   chrome.runtime.sendMessage({
     type: 'FEDERATION_IMPORT_RESULT',
     importId,
@@ -123,7 +148,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   sendResponse({ ok: true, pending: true, importId });
 
   publishImportLog(importId, 'Payload recibido desde la página; conectando con la API.', 'info');
-  sendImport(message.payload, importId)
+  publishImportLog(importId, 'Payload recibido desde la página; conectando con la API.', 'info')
+    .then(() => sendImport(message.payload, importId))
     .then((result) => publishImportResult(importId, { ok: true, result }))
     .catch((error) => publishImportResult(importId, {
       ok: false,

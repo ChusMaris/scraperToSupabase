@@ -24,14 +24,43 @@ const setStatus = (message, isError = false) => {
   status.style.color = isError ? '#fca5a5' : '#93c5fd';
 };
 
-const appendLog = (message, level = 'info') => {
+let activeImportId = null;
+const seenLogSequences = new Set();
+
+const appendLog = (message, level = 'info', timestamp = new Date().toISOString(), sequence = null) => {
+  if (sequence !== null) {
+    if (seenLogSequences.has(sequence)) return;
+    seenLogSequences.add(sequence);
+  }
+
   const logList = document.getElementById('import-log');
   const entry = document.createElement('li');
   entry.dataset.level = level;
-  entry.textContent = `${new Date().toLocaleTimeString()} ${message}`;
+  entry.textContent = `${new Date(timestamp).toLocaleTimeString()} ${message}`;
   logList.append(entry);
   while (logList.children.length > 60) logList.firstElementChild.remove();
   logList.scrollTop = logList.scrollHeight;
+};
+
+const restoreLastImportState = () => {
+  chrome.storage.local.get(['federationLastImportState'], (stored) => {
+    const state = stored.federationLastImportState;
+    if (!state) return;
+
+    activeImportId = state.importId;
+    seenLogSequences.clear();
+    for (const log of state.logs ?? []) {
+      appendLog(log.message, log.level, log.timestamp, log.sequence);
+    }
+
+    if (state.status === 'running') {
+      setStatus('Importación en curso. Actualizando trazas...');
+    } else if (state.status === 'completed') {
+      showImportResult(state.result);
+    } else if (state.status === 'failed') {
+      showImportResult(state.result);
+    }
+  });
 };
 
 const sendCaptureMessage = (tabId, message) => new Promise((resolve) => {
@@ -39,8 +68,6 @@ const sendCaptureMessage = (tabId, message) => new Promise((resolve) => {
     resolve({ response, error: chrome.runtime.lastError?.message });
   });
 });
-
-let activeImportId = null;
 
 const showImportResult = (result) => {
   if (result?.ok) {
@@ -52,11 +79,16 @@ const showImportResult = (result) => {
 };
 
 chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === 'FEDERATION_IMPORT_LOG' && message.importId !== activeImportId) {
+    activeImportId = message.importId;
+    seenLogSequences.clear();
+    document.getElementById('import-log').replaceChildren();
+  }
   if (message?.importId !== activeImportId) {
     return;
   }
   if (message.type === 'FEDERATION_IMPORT_LOG') {
-    appendLog(message.message, message.level);
+    appendLog(message.log.message, message.log.level, message.log.timestamp, message.log.sequence);
   } else if (message.type === 'FEDERATION_IMPORT_RESULT') {
     showImportResult(message.result);
     appendLog(message.result?.ok ? 'Importación finalizada.' : `Importación fallida: ${message.result?.error ?? 'error desconocido'}`, message.result?.ok ? 'success' : 'error');
@@ -108,9 +140,12 @@ const loadImportOptions = () => {
 };
 
 loadImportOptions();
+restoreLastImportState();
 
 document.getElementById('importBtn').addEventListener('click', async () => {
   document.getElementById('import-log').replaceChildren();
+  seenLogSequences.clear();
+  activeImportId = null;
   appendLog('Iniciando captura del partido.');
   setStatus('Buscando datos del partido...');
 
