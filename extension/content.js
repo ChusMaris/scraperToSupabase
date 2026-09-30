@@ -1,5 +1,16 @@
 const PAGE_CAPTURE_CHANNEL = '__basquetcatala_federation_capture__';
 
+const isPlainDataContainer = (value) => {
+  if (!value || typeof value !== 'object') return false;
+  try {
+    if (Array.isArray(value)) return true;
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  } catch {
+    return false;
+  }
+};
+
 const findPayloadsInTree = (roots) => {
   const result = { statsPayload: null, pbpPayload: null };
   const queue = roots.map(value => ({ value, depth: 0 }));
@@ -8,28 +19,28 @@ const findPayloadsInTree = (roots) => {
 
   while (queue.length && inspected < 3000 && (!result.statsPayload || !result.pbpPayload)) {
     const { value, depth } = queue.shift();
-    if (!value || typeof value !== 'object' || seen.has(value)) continue;
+    if (!isPlainDataContainer(value) || seen.has(value)) continue;
     seen.add(value);
     inspected += 1;
 
-    if (value.header && Array.isArray(value.boxscore)) {
-      result.statsPayload = value;
-    }
-    if (Array.isArray(value.playByPlay)) {
-      result.pbpPayload = value;
-    }
-
-    if (depth < 6) {
-      let nestedValues = [];
-      try {
-        nestedValues = Object.values(value);
-      } catch {
-        continue;
+    let nestedValues = [];
+    try {
+      if (value.header && Array.isArray(value.boxscore)) {
+        result.statsPayload = value;
       }
-      for (const nestedValue of nestedValues) {
-        if (nestedValue && typeof nestedValue === 'object') {
-          queue.push({ value: nestedValue, depth: depth + 1 });
-        }
+      if (Array.isArray(value.playByPlay)) {
+        result.pbpPayload = value;
+      }
+
+      if (depth < 6) {
+        nestedValues = Object.values(value);
+      }
+    } catch {
+      continue;
+    }
+    for (const nestedValue of nestedValues) {
+      if (isPlainDataContainer(nestedValue)) {
+        queue.push({ value: nestedValue, depth: depth + 1 });
       }
     }
   }
@@ -41,13 +52,6 @@ const findPayloadsInPage = () => {
   const roots = [];
   const pageKeys = ['__MATCH_STATS__', '__MATCH_PBP__', '__FEDERATION_STATS__', '__FEDERATION_PBP__', '__MATCH_DATA__', '__APP_STATE__'];
 
-  for (const key of Object.keys(window)) {
-    try {
-      roots.push(window[key]);
-    } catch {
-      // Ignore cross-origin window properties.
-    }
-  }
   for (const key of pageKeys) {
     try {
       roots.push(window[key]);
