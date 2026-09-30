@@ -177,7 +177,7 @@ export const persistFederationMatchToLegacy = async (
 
     const legacyPlayer = await upsertOne(database, 'jugadores', {
       nombre_completo: player.name,
-      actor_id: player.externalUuid ?? player.id
+      actor_id: toLegacyBigintId(player.externalUuid ?? player.id)
     }, 'nombre_completo', `Jugador ${player.name}`);
     playerIds.set(player.id, legacyPlayer.id);
 

@@ -105,6 +105,14 @@ test('persists the normalized match only through existing legacy tables', async 
   const teamWrites = operations.filter(operation => operation.table === 'equipos' && operation.method === 'upsert');
   assert.equal(teamWrites.length, 2);
   assert.equal(teamWrites.every(operation => !('team_id_intern_fce' in operation.value)), true);
+
+  const playerWrites = operations.filter(operation => operation.table === 'jugadores' && operation.method === 'upsert');
+  assert.equal(playerWrites.length, normalized.players.length);
+  assert.equal(playerWrites.every(operation => /^\d+$/.test(String(operation.value.actor_id))), true);
+  assert.equal(
+    playerWrites[0].value.actor_id,
+    toLegacyBigintId(normalized.players[0].externalUuid ?? normalized.players[0].id)
+  );
 });
 
 test('rejects missing match date or score before writing any database row', async () => {
