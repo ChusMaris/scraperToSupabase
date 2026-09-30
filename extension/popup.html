@@ -50,6 +50,27 @@
         min-height: 18px;
         color: #93c5fd;
       }
+      .log-list {
+        max-height: 150px;
+        overflow-y: auto;
+        margin: 10px 0 0;
+        padding: 8px 8px 8px 28px;
+        border: 1px solid #374151;
+        border-radius: 6px;
+        background: #0b1220;
+        font-size: 11px;
+        line-height: 1.4;
+        color: #cbd5e1;
+      }
+      .log-list li + li {
+        margin-top: 4px;
+      }
+      .log-list li[data-level="error"] {
+        color: #fca5a5;
+      }
+      .log-list li[data-level="success"] {
+        color: #86efac;
+      }
     </style>
   </head>
   <body>
@@ -57,30 +78,39 @@
 
     <label>
       Temporada
-      <input id="temporada" type="text" list="temporada-options" placeholder="Selecciona o escribe una temporada" autocomplete="off" />
-      <datalist id="temporada-options"></datalist>
+      <select id="temporada">
+        <option value="">Cargando temporadas...</option>
+      </select>
+      <input id="temporada-new" class="custom-value" type="text" placeholder="Escribe otra temporada" hidden />
     </label>
 
     <label>
       Categoría
-      <input id="categoria" type="text" list="categoria-options" placeholder="Selecciona o escribe una categoría" autocomplete="off" />
-      <datalist id="categoria-options"></datalist>
+      <select id="categoria">
+        <option value="">Cargando categorías...</option>
+      </select>
+      <input id="categoria-new" class="custom-value" type="text" placeholder="Escribe otra categoría" hidden />
     </label>
 
     <label>
       Competición
-      <input id="competicion" type="text" list="competicion-options" placeholder="Selecciona o escribe una competición" autocomplete="off" />
-      <datalist id="competicion-options"></datalist>
+      <select id="competicion">
+        <option value="">Cargando competiciones...</option>
+      </select>
+      <input id="competicion-new" class="custom-value" type="text" placeholder="Escribe otra competición" hidden />
     </label>
 
     <label>
       Jornada
-      <input id="jornada" type="number" min="1" list="jornada-options" placeholder="Selecciona o escribe una jornada" />
-      <datalist id="jornada-options"></datalist>
+      <select id="jornada">
+        <option value="">Selecciona jornada</option>
+      </select>
+      <input id="jornada-new" class="custom-value" type="number" min="1" placeholder="Escribe otra jornada" hidden />
     </label>
 
     <button id="importBtn">Importar datos</button>
     <div id="status" class="status">Listo.</div>
+    <ol id="import-log" class="log-list" role="log" aria-live="polite" aria-label="Registro de importación"></ol>
 
     <script src="popup.js"></script>
   </body>

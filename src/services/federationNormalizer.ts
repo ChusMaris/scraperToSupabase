@@ -53,8 +53,8 @@ export interface FederationMatchRecord {
   visitorTeamId: string;
   localTeamName: string;
   visitorTeamName: string;
-  finalScoreLocal: number;
-  finalScoreVisitor: number;
+  finalScoreLocal: number | null;
+  finalScoreVisitor: number | null;
   externalCompetitionUuid?: string | null;
   externalGroupUuid?: string | null;
   externalCategoryUuid?: string | null;
@@ -425,8 +425,8 @@ export const normalizeFederationMatch = (
     visitorTeamId: visitorTeamId,
     localTeamName: localTeam.name ?? 'Local team',
     visitorTeamName: visitorTeam.name ?? 'Visitor team',
-    finalScoreLocal: toNumber(header.score?.local) ?? 0,
-    finalScoreVisitor: toNumber(header.score?.visitor) ?? 0,
+    finalScoreLocal: toNumber(header.score?.local),
+    finalScoreVisitor: toNumber(header.score?.visitor),
     externalCompetitionUuid: toUuid(header.competitionGuid),
     externalGroupUuid: toUuid(header.groupUuid),
     externalCategoryUuid: toUuid(header.categoryUuid)

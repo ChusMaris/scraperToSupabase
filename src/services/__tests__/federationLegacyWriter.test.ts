@@ -60,12 +60,14 @@ const createRecordingDatabase = () => {
 test('persists the normalized match only through existing legacy tables', async () => {
   const normalized = normalizeFederationMatch(stats, pbp);
   const { database, operations } = createRecordingDatabase();
+  const progressLogs: string[] = [];
   const result = await persistFederationMatchToLegacy(
     normalized,
     { temporada: '2026/27', categoria: normalized.category.name, competicion: normalized.competition.name },
     7,
     'https://www.basquetcatala.cat/match/95332c8d-eefc-43ed-ac9a-d9af7d4f926d',
-    database
+    database,
+    message => progressLogs.push(message)
   );
 
   const writtenTables = new Set(operations.map(operation => operation.table));
@@ -87,12 +89,51 @@ test('persists the normalized match only through existing legacy tables', async 
   const matchWrite = operations.find(operation => operation.table === 'partidos' && operation.method === 'upsert');
   assert.equal(matchWrite?.value.jornada, 7);
   assert.equal(matchWrite?.value.id_match_extern, result.externalMatchId);
+  assert.equal(matchWrite?.value.fecha_hora, new Date(stats.header.date).toISOString());
+  assert.equal(matchWrite?.value.puntos_local, stats.header.score.local);
+  assert.equal(matchWrite?.value.puntos_visitante, stats.header.score.visitor);
+  assert.equal(result.fechaHora, new Date(stats.header.date).toISOString());
+  assert.equal(result.puntosLocal, stats.header.score.local);
+  assert.equal(result.puntosVisitante, stats.header.score.visitor);
+  assert.ok(progressLogs.some(message => message.includes('Guardando temporada')));
+  assert.ok(progressLogs.some(message => message.includes('Guardando estadísticas de')));
+  assert.ok(progressLogs.some(message => message.includes('Guardando 276 eventos')));
+  assert.ok(progressLogs.some(message => message.includes('Importación completa')));
   assert.equal(matchWrite?.value.puntos_local, normalized.match.finalScoreLocal);
   assert.equal(matchWrite?.value.puntos_visitante, normalized.match.finalScoreVisitor);
 
   const teamWrites = operations.filter(operation => operation.table === 'equipos' && operation.method === 'upsert');
   assert.equal(teamWrites.length, 2);
   assert.equal(teamWrites.every(operation => !('team_id_intern_fce' in operation.value)), true);
+});
+
+test('rejects missing match date or score before writing any database row', async () => {
+  const normalized = normalizeFederationMatch(stats, pbp);
+  const { database, operations } = createRecordingDatabase();
+
+  await assert.rejects(
+    persistFederationMatchToLegacy(
+      { ...normalized, match: { ...normalized.match, date: null } },
+      { temporada: '2026/27', categoria: normalized.category.name, competicion: normalized.competition.name },
+      1,
+      undefined,
+      database
+    ),
+    /header\.date/
+  );
+  assert.equal(operations.length, 0);
+
+  await assert.rejects(
+    persistFederationMatchToLegacy(
+      { ...normalized, match: { ...normalized.match, finalScoreVisitor: null } },
+      { temporada: '2026/27', categoria: normalized.category.name, competicion: normalized.competition.name },
+      1,
+      undefined,
+      database
+    ),
+    /header\.score\.visitor/
+  );
+  assert.equal(operations.length, 0);
 });
 
 test('keeps legacy numeric match IDs intact and hashes UUIDs deterministically', () => {

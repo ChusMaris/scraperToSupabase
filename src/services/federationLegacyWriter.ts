@@ -62,17 +62,43 @@ export const persistFederationMatchToLegacy = async (
   onLog?: (message: string, type?: 'info' | 'success' | 'error' | 'data') => void
 ) => {
   const log = (message: string, type: 'info' | 'success' | 'error' | 'data' = 'info') => onLog?.(message, type);
+  log('Validando fecha y marcador del encabezado...', 'info');
+  const sourceDate = normalized.match.date;
+  const parsedMatchDate = sourceDate ? new Date(sourceDate) : null;
+  if (!parsedMatchDate || !Number.isFinite(parsedMatchDate.getTime())) {
+    throw new Error('No se puede importar: falta header.date o no es una fecha válida.');
+  }
+
+  const localScore = normalized.match.finalScoreLocal;
+  if (localScore === null || !Number.isFinite(localScore)) {
+    throw new Error('No se puede importar: falta header.score.local o no es numérico.');
+  }
+
+  const visitorScore = normalized.match.finalScoreVisitor;
+  if (visitorScore === null || !Number.isFinite(visitorScore)) {
+    throw new Error('No se puede importar: falta header.score.visitor o no es numérico.');
+  }
+
+  const matchDate = parsedMatchDate.toISOString();
+  log(`Fecha y marcador validados: ${matchDate}, ${localScore}-${visitorScore}.`, 'success');
+  log(`Guardando temporada ${metadata.temporada}...`, 'info');
   const seasonResult = await upsertOne(database, 'temporadas', { nombre: metadata.temporada }, 'nombre', 'Temporada');
+  log('Temporada guardada.', 'success');
+  log(`Guardando categoría ${metadata.categoria}...`, 'info');
   const categoryResult = await upsertOne(database, 'categorias', { nombre: metadata.categoria }, 'nombre', 'Categoría');
+  log('Categoría guardada.', 'success');
+  log(`Guardando competición ${metadata.competicion}...`, 'info');
   const competitionResult = await upsertOne(database, 'competiciones', {
     nombre: metadata.competicion,
     temporada_id: seasonResult.id,
     categoria_id: categoryResult.id
   }, 'nombre,temporada_id,categoria_id', 'Competición');
+  log('Competición guardada.', 'success');
 
   const teamIds = new Map<string, string>();
 
-  for (const team of normalized.teams) {
+  for (const [teamIndex, team] of normalized.teams.entries()) {
+    log(`Guardando equipo ${teamIndex + 1}/${normalized.teams.length}: ${team.name}...`, 'info');
     const club = await upsertOne(database, 'clubs', {
       nombre: team.clubName ?? team.name,
       nombre_corto: team.shortName ?? null
@@ -88,6 +114,7 @@ export const persistFederationMatchToLegacy = async (
 
     teamIds.set(team.id, legacyTeam.id);
     teamIds.set(slugFromText(providerTeamId), legacyTeam.id);
+    log(`Equipo ${team.name} guardado.`, 'success');
   }
 
   const localTeam = normalized.teams.find(team => team.name === normalized.match.localTeamName) ?? normalized.teams[0];
@@ -100,20 +127,19 @@ export const persistFederationMatchToLegacy = async (
     ?? sourceUrl?.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0]
     ?? `match-${slugFromText(`${normalized.match.localTeamName}-${normalized.match.visitorTeamName}-${normalized.match.date ?? 'unknown-date'}`)}`;
   const legacyMatchId = toLegacyBigintId(sourceMatchId);
-  const matchDate = normalized.match.date && Number.isFinite(new Date(normalized.match.date).getTime())
-    ? new Date(normalized.match.date).toISOString()
-    : null;
   const match = await upsertOne(database, 'partidos', {
     id_match_extern: legacyMatchId,
     competicion_id: competitionResult.id,
     equipo_local_id: teamIds.get(localTeam.id),
     equipo_visitante_id: teamIds.get(visitorTeam.id),
     fecha_hora: matchDate,
-    puntos_local: normalized.match.finalScoreLocal,
-    puntos_visitante: normalized.match.finalScoreVisitor,
+    puntos_local: localScore,
+    puntos_visitante: visitorScore,
     jornada: matchDay
   }, 'id_match_extern', 'Partido');
+  log(`Partido guardado: ${matchDate}, ${localScore}-${visitorScore}, jornada ${matchDay ?? '-'}.`, 'success');
 
+  log('Limpiando estadísticas anteriores de la misma importación...', 'info');
   const { error: evolutionDeleteError } = await database.from('partido_marcador_evolucion').delete().eq('partido_id', match.id);
   throwOnError('Limpieza de evolución del marcador', evolutionDeleteError);
   const { error: movementsDeleteError } = await database.from('partido_movimientos').delete().eq('partido_id', match.id);
@@ -144,7 +170,8 @@ export const persistFederationMatchToLegacy = async (
     }
   }
 
-  for (const player of normalized.players) {
+  log(`Guardando estadísticas de ${normalized.players.length} jugadores...`, 'info');
+  for (const [playerIndex, player] of normalized.players.entries()) {
     const teamId = player.teamId ? teamIds.get(player.teamId) : undefined;
     if (!teamId) continue;
 
@@ -212,9 +239,11 @@ export const persistFederationMatchToLegacy = async (
         .upsert(shots, { onConflict: 'event_uuid' });
       throwOnError(`Tiros ${player.name}`, shotsError);
     }
+    log(`Jugador ${playerIndex + 1}/${normalized.players.length}: ${player.name} guardado.`, 'success');
   }
 
   if (normalized.scoreEvolution.length) {
+    log(`Guardando ${normalized.scoreEvolution.length} cambios de marcador...`, 'info');
     const scoreRows = normalized.scoreEvolution.map(entry => ({
       partido_id: match.id,
       periodo: entry.period,
@@ -226,8 +255,10 @@ export const persistFederationMatchToLegacy = async (
     }));
     const { error } = await database.from('partido_marcador_evolucion').insert(scoreRows);
     throwOnError('Evolución del marcador', error);
+    log('Evolución del marcador guardada.', 'success');
   }
 
+  log(`Guardando ${normalized.events.length} eventos de juego...`, 'info');
   const movementRows = normalized.events.map(event => {
     const teamDbId = event.teamId ? teamIds.get(event.teamId) : undefined;
     const playerDbId = event.playerId ? playerIds.get(event.playerId) : undefined;
@@ -279,7 +310,7 @@ export const persistFederationMatchToLegacy = async (
     throwOnError('Movimientos del partido', error);
   }
 
-  log(`Partido ${sourceMatchId} guardado con clave legacy ${legacyMatchId}`, 'success');
+  log(`Importación completa. Clave legacy ${legacyMatchId}; fecha ${matchDate}; marcador ${localScore}-${visitorScore}.`, 'success');
   return {
     matchId: match.id,
     sourceMatchId,
@@ -289,6 +320,10 @@ export const persistFederationMatchToLegacy = async (
     competitionName: metadata.competicion,
     localTeam: normalized.match.localTeamName,
     visitorTeam: normalized.match.visitorTeamName,
-    score: `${normalized.match.finalScoreLocal}-${normalized.match.finalScoreVisitor}`
+    fechaHora: matchDate,
+    jornada: matchDay,
+    puntosLocal: localScore,
+    puntosVisitante: visitorScore,
+    score: `${localScore}-${visitorScore}`
   };
 };

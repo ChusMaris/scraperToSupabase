@@ -93,11 +93,29 @@ app.post('/api/federation/import', async (req, res) => {
     return;
   }
 
+  const wantsEventStream = req.get('accept')?.includes('text/event-stream') ?? false;
+  const writeEvent = (event: Record<string, unknown>) => {
+    if (wantsEventStream && !res.writableEnded) {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    }
+  };
+
+  if (wantsEventStream) {
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+  }
+
   try {
+    writeEvent({ type: 'log', level: 'info', message: 'Petición recibida; preparando importación.' });
     const statsPayload = req.body.statsPayload ?? req.body.mainJson;
     const pbpPayload = req.body.pbpPayload ?? req.body.movesJson;
     const metadata = req.body.metadata ?? statsPayload.metadata ?? {};
     const normalized = normalizeFederationMatch(statsPayload, pbpPayload);
+    writeEvent({ type: 'log', level: 'success', message: `JSON normalizados: ${normalized.teams.length} equipos, ${normalized.players.length} jugadores, ${normalized.events.length} eventos.` });
     const legacyMetadata = {
       temporada: typeof metadata.temporada === 'string' && metadata.temporada.trim()
         ? metadata.temporada.trim()
@@ -118,14 +136,25 @@ app.post('/api/federation/import', async (req, res) => {
       legacyMetadata,
       matchDay,
       req.body.sourceUrl,
-      supabase
+      supabase,
+      (message, level = 'info') => writeEvent({ type: 'log', level, message })
     );
 
-    res.status(200).json({ ok: true, result });
+    if (wantsEventStream) {
+      writeEvent({ type: 'complete', result });
+      res.end();
+    } else {
+      res.status(200).json({ ok: true, result });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown import error';
     console.error('[api] Import failed:', message);
-    res.status(500).json({ ok: false, error: message });
+    if (wantsEventStream) {
+      writeEvent({ type: 'error', error: message });
+      res.end();
+    } else {
+      res.status(500).json({ ok: false, error: message });
+    }
   }
 });
 
