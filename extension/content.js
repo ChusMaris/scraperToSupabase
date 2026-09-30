@@ -1,80 +1,92 @@
-const pickFromWindow = () => {
-  const candidates = [];
-  const scope = window;
+const PAGE_CAPTURE_CHANNEL = '__basquetcatala_federation_capture__';
 
-  for (const key of Object.keys(scope)) {
-    let value;
-    try {
-      value = scope[key];
-    } catch {
-      continue;
+const findPayloadsInTree = (roots) => {
+  const result = { statsPayload: null, pbpPayload: null };
+  const queue = roots.map(value => ({ value, depth: 0 }));
+  const seen = new WeakSet();
+  let inspected = 0;
+
+  while (queue.length && inspected < 3000 && (!result.statsPayload || !result.pbpPayload)) {
+    const { value, depth } = queue.shift();
+    if (!value || typeof value !== 'object' || seen.has(value)) continue;
+    seen.add(value);
+    inspected += 1;
+
+    if (value.header && Array.isArray(value.boxscore)) {
+      result.statsPayload = value;
     }
-    if (!value || typeof value !== 'object') continue;
+    if (Array.isArray(value.playByPlay)) {
+      result.pbpPayload = value;
+    }
 
-    try {
-      if (value.header || value.boxscore || value.scoreEvolution || value.playByPlay || value.shotChart) {
-        candidates.push(value);
+    if (depth < 6) {
+      let nestedValues = [];
+      try {
+        nestedValues = Object.values(value);
+      } catch {
+        continue;
       }
-    } catch {
-      continue;
+      for (const nestedValue of nestedValues) {
+        if (nestedValue && typeof nestedValue === 'object') {
+          queue.push({ value: nestedValue, depth: depth + 1 });
+        }
+      }
     }
   }
 
-  const globalKeys = [
-    '__MATCH_STATS__',
-    '__MATCH_PBP__',
-    '__FEDERATION_STATS__',
-    '__FEDERATION_PBP__',
-    '__MATCH_DATA__',
-    '__APP_STATE__'
-  ];
-
-  for (const key of globalKeys) {
-    try {
-      const value = window[key];
-      if (value && typeof value === 'object') {
-        candidates.push(value);
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return candidates;
+  return result;
 };
 
-const findPayload = () => {
-  const windowObjects = pickFromWindow();
+const findPayloadsInPage = () => {
+  const roots = [];
+  const pageKeys = ['__MATCH_STATS__', '__MATCH_PBP__', '__FEDERATION_STATS__', '__FEDERATION_PBP__', '__MATCH_DATA__', '__APP_STATE__'];
 
-  for (const candidate of windowObjects) {
-    let hasStats;
-    let hasPbp;
+  for (const key of Object.keys(window)) {
     try {
-      hasStats = !!candidate?.header || !!candidate?.boxscore || !!candidate?.shotChart || !!candidate?.scoreEvolution;
-      hasPbp = !!candidate?.playByPlay || Array.isArray(candidate?.movements) || Array.isArray(candidate?.plays);
+      roots.push(window[key]);
     } catch {
-      continue;
+      // Ignore cross-origin window properties.
     }
-
-    if (hasStats || hasPbp) {
-      return candidate;
+  }
+  for (const key of pageKeys) {
+    try {
+      roots.push(window[key]);
+    } catch {
+      // Ignore inaccessible page globals.
     }
   }
 
-  const scripts = document.querySelectorAll('script[type="application/json"]');
-  for (const script of scripts) {
+  for (const script of document.querySelectorAll('script[type="application/json"]')) {
     try {
-      const raw = JSON.parse(script.textContent || '');
-      if (raw?.header || raw?.boxscore || raw?.playByPlay || raw?.scoreEvolution) {
-        return raw;
-      }
+      roots.push(JSON.parse(script.textContent || ''));
     } catch {
       // Ignore invalid JSON scripts.
     }
   }
 
-  return null;
+  return findPayloadsInTree(roots);
 };
+
+const getCapturedNetworkPayloads = () => new Promise((resolve) => {
+  let complete = false;
+  const finish = (payloads) => {
+    if (complete) return;
+    complete = true;
+    window.clearTimeout(timeoutId);
+    window.removeEventListener('message', onPageMessage);
+    resolve(payloads);
+  };
+  const onPageMessage = (event) => {
+    if (event.source === window && event.origin === window.location.origin
+      && event.data?.channel === PAGE_CAPTURE_CHANNEL && event.data.type === 'PAYLOADS') {
+      finish(event.data.payloads ?? {});
+    }
+  };
+  const timeoutId = window.setTimeout(() => finish({}), 500);
+
+  window.addEventListener('message', onPageMessage);
+  window.postMessage({ channel: PAGE_CAPTURE_CHANNEL, type: 'GET_PAYLOADS' }, window.location.origin);
+});
 
 const sanitizeForMessage = (value, seen = new WeakSet()) => {
   if (value === null || value === undefined) return value;
@@ -113,10 +125,11 @@ const sanitizeForMessage = (value, seen = new WeakSet()) => {
   return String(value);
 };
 
-const sendPayloadToBackground = (payload) => new Promise((resolve) => {
+const sendPayloadToBackground = (statsPayload, pbpPayload, metadata) => new Promise((resolve) => {
   const safePayload = sanitizeForMessage({
-    statsPayload: payload,
-    pbpPayload: payload,
+    statsPayload,
+    pbpPayload,
+    metadata,
     sourceUrl: window.location.href,
     capturedAt: new Date().toISOString()
   });
@@ -139,20 +152,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return;
   }
 
-  const payload = findPayload();
+  (async () => {
+    const [networkPayloads, pagePayloads] = await Promise.all([
+      getCapturedNetworkPayloads(),
+      Promise.resolve(findPayloadsInPage())
+    ]);
+    const statsPayload = networkPayloads.statsPayload ?? pagePayloads.statsPayload;
+    const pbpPayload = networkPayloads.pbpPayload ?? pagePayloads.pbpPayload;
 
-  if (!payload) {
-    console.warn('[extension] No federation payload found in this page.');
-    sendResponse({ ok: false, error: 'No federation payload found in page.' });
-    return;
-  }
+    if (!statsPayload || !pbpPayload) {
+      const missing = [
+        !statsPayload && 'stats (header + boxscore)',
+        !pbpPayload && 'play-by-play'
+      ].filter(Boolean).join(' y ');
+      sendResponse({
+        ok: false,
+        error: `No se capturaron ambos JSON (${missing}). Recarga la página del partido con la extensión activa y vuelve a probar.`
+      });
+      return;
+    }
 
-  const metadata = message.metadata || {};
-
-  sendPayloadToBackground({
-    ...payload,
-    metadata
-  }).then(sendResponse).catch((error) => {
+    const metadata = message.metadata || {};
+    sendPayloadToBackground(statsPayload, pbpPayload, metadata)
+      .then(sendResponse)
+      .catch(error => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+  })().catch(error => {
     sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) });
   });
   return true;

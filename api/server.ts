@@ -114,6 +114,11 @@ app.post('/api/federation/import', async (req, res) => {
     const statsPayload = req.body.statsPayload ?? req.body.mainJson;
     const pbpPayload = req.body.pbpPayload ?? req.body.movesJson;
     const metadata = req.body.metadata ?? statsPayload.metadata ?? {};
+    writeEvent({
+      type: 'log',
+      level: 'info',
+      message: `Payload recibido: fecha=${JSON.stringify(statsPayload?.header?.date)}, marcador=${JSON.stringify(statsPayload?.header?.score)}, boxscore=${Array.isArray(statsPayload?.boxscore) ? statsPayload.boxscore.length : 'ausente'}, eventosPBP=${Array.isArray(pbpPayload?.playByPlay) ? pbpPayload.playByPlay.length : 'ausente'}.`
+    });
     const normalized = normalizeFederationMatch(statsPayload, pbpPayload);
     writeEvent({ type: 'log', level: 'success', message: `JSON normalizados: ${normalized.teams.length} equipos, ${normalized.players.length} jugadores, ${normalized.events.length} eventos.` });
     const legacyMetadata = {
