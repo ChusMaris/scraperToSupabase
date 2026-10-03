@@ -13,8 +13,9 @@ test('documents current health, federation and complementary statistics routes',
   ]);
 });
 
-test('documents Bearer authorization for the complementary import operation', () => {
-  const operation = openApiDocument.paths['/api/complementary-stats/import'].post;
-  assert.deepEqual(operation.security, [{ importToken: [] }]);
-  assert.equal(openApiDocument.components.securitySchemes.importToken.scheme, 'bearer');
+test('uses the same unauthenticated access model as the existing federation import', () => {
+  const operation = openApiDocument.paths['/api/complementary-stats/import'].post as { security?: unknown };
+  const components = openApiDocument.components as { securitySchemes?: unknown };
+  assert.equal(operation.security, undefined);
+  assert.equal(components.securitySchemes, undefined);
 });

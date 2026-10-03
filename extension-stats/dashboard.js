@@ -9,10 +9,11 @@ const statFields = [
 let extractedRows = [];
 let includedMatchCount = null;
 let captureInProgress = false;
+let catalogError = null;
 
 const elements = Object.fromEntries([
   'status', 'context-state', 'grid-meta', 'grid-body', 'extract-button', 'submit-button',
-  'single-match-confirmation', 'api-token', 'save-settings'
+  'single-match-confirmation', 'reload-options'
 ].map((id) => [id, document.getElementById(id)]));
 
 const setStatus = (message, kind = 'info') => {
@@ -43,11 +44,22 @@ const setOptions = async (id, type, parameters, prompt) => {
   select.replaceChildren(new Option('Cargando...', ''));
   select.disabled = true;
   const query = new URLSearchParams({ type, ...parameters });
-  const response = await apiRequest(`/api/complementary-stats/options?${query}`);
-  const items = response.options ?? [];
-  select.replaceChildren(new Option(prompt, ''), ...items.map((item) => new Option(item.name, String(item.id))));
-  select.disabled = items.length === 0;
-  if (!items.length) select.replaceChildren(new Option('Sin opciones disponibles', ''));
+  try {
+    const response = await apiRequest(`/api/complementary-stats/options?${query}`);
+    if (!Array.isArray(response.options)) throw new Error('La API respondió sin una lista de opciones válida.');
+    const items = response.options;
+    if (!items.length) {
+      select.replaceChildren(new Option('Sin opciones disponibles', ''));
+      throw new Error(`La API no devolvió opciones para ${type}.`);
+    }
+    select.replaceChildren(new Option(prompt, ''), ...items.map((item) => new Option(item.name, String(item.id))));
+    select.disabled = false;
+    catalogError = null;
+  } catch (error) {
+    select.replaceChildren(new Option(`Error: ${error.message}`, ''));
+    select.disabled = true;
+    throw error;
+  }
 };
 
 const setContextState = () => {
@@ -145,9 +157,11 @@ const extractFromPage = async () => {
 const loadInitialOptions = async () => {
   try {
     await setOptions('season', 'seasons', {}, 'Selecciona temporada');
+    catalogError = null;
     if (!captureInProgress && !extractedRows.length) setStatus('Catálogos listos. Selecciona el contexto del partido.');
   } catch (error) {
-    setStatus(`No se pudieron cargar los catálogos: ${error.message}`, 'error');
+    catalogError = error.message;
+    setStatus(`No se pudieron cargar los catálogos: ${catalogError}`, 'error');
   }
   setContextState();
 };
@@ -180,6 +194,7 @@ const handleContextChange = async (changedId) => {
       await setOptions('team', 'teams', { matchId: document.getElementById('match').value }, 'Selecciona equipo');
     }
   } catch (error) {
+    catalogError = error.message;
     setStatus(`No se pudieron cargar las opciones: ${error.message}`, 'error');
   }
   setContextState();
@@ -188,6 +203,10 @@ const handleContextChange = async (changedId) => {
 selectIds.forEach((id) => document.getElementById(id).addEventListener('change', () => {
   void handleContextChange(id);
 }));
+
+elements['reload-options'].addEventListener('click', () => {
+  void loadInitialOptions();
+});
 
 elements['single-match-confirmation'].addEventListener('change', updateSubmitState);
 elements['grid-body'].addEventListener('input', updateSubmitState);
@@ -205,7 +224,9 @@ const captureCurrentPage = async () => {
     elements['single-match-confirmation'].disabled = false;
     elements['single-match-confirmation'].checked = false;
     renderGrid();
-    setStatus('Revisa la plantilla, selecciona el equipo y confirma que el partido coincide.', 'success');
+    setStatus(catalogError
+      ? `Plantilla extraída; los combos no están disponibles: ${catalogError}`
+      : 'Revisa la plantilla, selecciona el equipo y confirma que el partido coincide.', catalogError ? 'error' : 'success');
   } catch (error) {
     extractedRows = [];
     includedMatchCount = null;
@@ -264,17 +285,6 @@ elements['submit-button'].addEventListener('click', async () => {
   } finally {
     updateSubmitState();
   }
-});
-
-elements['save-settings'].addEventListener('click', async () => {
-  const token = elements['api-token'].value.trim();
-  if (token) await chrome.storage.local.set({ complementaryStatsApiToken: token });
-  else await chrome.storage.local.remove('complementaryStatsApiToken');
-  setStatus('Configuración guardada en esta extensión.', 'success');
-});
-
-chrome.storage.local.get(['complementaryStatsApiToken']).then((stored) => {
-  elements['api-token'].value = stored.complementaryStatsApiToken || '';
 });
 
 if (!Number.isInteger(targetTabId) || targetTabId < 0) {

@@ -9,7 +9,6 @@ Create a `.env` file in this folder with:
 ```env
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
-COMPLEMENTARY_STATS_API_TOKEN=replace-with-a-long-random-secret
 PORT=4000
 ```
 
@@ -78,11 +77,10 @@ GET /api/complementary-stats/options?type=matches&competitionId=...&matchday=...
 GET /api/complementary-stats/options?type=teams&matchId=...
 ```
 
-Writes require `COMPLEMENTARY_STATS_API_TOKEN` and a Bearer authorization header:
+Writes use the same API access model as the existing federation import endpoint:
 
 ```http
 POST /api/complementary-stats/import
-Authorization: Bearer <configured-token>
 Content-Type: application/json
 ```
 
@@ -117,6 +115,6 @@ Content-Type: application/json
 }
 ```
 
-The endpoint validates the selected relationships and resolves each dorsal against that team's roster and the selected match before writing. It updates only the ten complementary statistics and never creates a missing match-statistics row. The extension stores the API base URL and token in its local Chrome storage; configure the token only for trusted installations.
+The endpoint validates the selected relationships and resolves each dorsal against that team's roster and the selected match before writing. It updates only the ten complementary statistics and never creates a missing match-statistics row.
 
-**Security limitation:** the existing database RLS policy grants `UPDATE` to the Supabase `anon` role. The Bearer token protects this API route but does not make that existing direct database policy private; review RLS separately before treating the database as restricted to trusted users.
+**Security limitation:** the existing database RLS policy grants `UPDATE` to the Supabase `anon` role. This endpoint follows the same public access model and does not provide user-level authorization; review RLS separately before treating the database as restricted to trusted users.

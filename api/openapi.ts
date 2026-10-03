@@ -81,7 +81,6 @@ export const openApiDocument = {
       post: {
         tags: ['Estadísticas complementarias'],
         summary: 'Actualizar estadísticas complementarias de un partido',
-        security: [{ importToken: [] }],
         requestBody: {
           required: true,
           content: { 'application/json': { schema: { $ref: '#/components/schemas/ComplementaryImportRequest' } } }
@@ -89,16 +88,12 @@ export const openApiDocument = {
         responses: {
           '200': { description: 'Filas actualizadas' },
           '400': { description: 'Contexto, dorsal o estadística no válidos' },
-          '401': { description: 'Token Bearer ausente o no válido' },
           '503': { description: 'Importación no configurada' }
         }
       }
     }
   },
   components: {
-    securitySchemes: {
-      importToken: { type: 'http', scheme: 'bearer', bearerFormat: 'token' }
-    },
     schemas: {
       OptionsResponse: {
         type: 'object',

@@ -9,6 +9,7 @@
 - [x] 1.7 Enviar el contexto y las filas editadas como JSON al nuevo endpoint, mostrando validación, progreso y resultado por dorsal.
 - [x] 1.8 Iniciar automáticamente la captura al abrir el dashboard y conservar una acción para reintentar.
 - [x] 1.9 Leer la URL base desde un fichero de configuración dedicado, fuera de los scripts de la extensión.
+- [x] 1.10 Mostrar los errores de catálogos y permitir reintentar su carga desde la interfaz.
 
 ## 2. API y persistencia
 
@@ -17,7 +18,7 @@
 - [x] 2.3 Añadir endpoint de importación con validación del contexto, enteros no negativos y filas antes de iniciar escrituras.
 - [x] 2.4 Resolver cada dorsal a un único jugador/registro de estadísticas dentro del partido y equipo seleccionados; devolver error claro para ausencias o ambigüedades.
 - [x] 2.5 Actualizar solo los diez campos complementarios especificados sin usar upsert de la fila completa ni crear registros ausentes.
-- [x] 2.6 Definir y aplicar el mecanismo de autorización del endpoint antes de habilitar escrituras en producción.
+- [x] 2.6 Mantener el mismo modelo de acceso público que el endpoint de importación federativa existente.
 - [x] 2.7 Publicar el documento OpenAPI y Swagger UI para las rutas actuales y nuevas.
 
 ## 3. Verificación y documentación

@@ -43,6 +43,7 @@ main { max-width: 1480px; margin: 0 auto; padding: 20px 28px 40px; }
 
 .context-section, .grid-section { padding: 16px 0 20px; border-top: 1px solid #ccd4cf; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.section-tools { display: flex; align-items: center; gap: 12px; }
 h2 { margin: 0; font-size: 15px; font-weight: 750; }
 .section-note { color: #687771; font-size: 12px; }
 .context-grid { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)); gap: 12px; }
@@ -107,4 +108,5 @@ td.jersey-cell input { min-width: 64px; }
 @media (max-width: 480px) {
   .context-grid { grid-template-columns: 1fr; }
   .section-heading { align-items: flex-start; flex-direction: column; }
+  .section-tools { align-items: flex-start; flex-direction: column; }
 }

@@ -97,12 +97,23 @@ The system SHALL start extracting the active statistics page when the import das
 - **WHEN** automatic extraction cannot find or parse the table
 - **THEN** the dashboard SHALL display the extraction error and SHALL allow the user to retry manually
 
-### Requirement: API base URL comes from a separate configuration file
+### Requirement: API URL comes from a separate configuration file
 The system SHALL read the API base URL from a dedicated configuration file rather than embedding it in the dashboard or transport logic.
 
 #### Scenario: API host is changed for deployment
 - **WHEN** an operator changes the configured API base URL and allows that host in the extension manifest
-- **THEN** the extension SHALL send catalog and import requests to the configured API host
+- **THEN** the extension SHALL send catalog and import requests to the configured host without requiring an API token
+
+### Requirement: Catalog loading failures are visible and recoverable
+The system SHALL explain why catalog options could not be loaded and allow the operator to retry.
+
+#### Scenario: Catalog request fails
+- **WHEN** the API request fails or returns an invalid options response
+- **THEN** the selector SHALL show an error state and the dashboard SHALL retain a visible diagnostic instead of an indefinite loading state
+
+#### Scenario: Operator retries catalog loading
+- **WHEN** the operator activates the catalog reload action
+- **THEN** the extension SHALL request the seasons catalog again and update the selector state
 
 ### Requirement: API operations are discoverable through OpenAPI and Swagger UI
 The system SHALL serve an OpenAPI document for its HTTP operations and provide an interactive Swagger UI.

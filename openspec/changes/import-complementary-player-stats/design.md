@@ -34,6 +34,8 @@ Al abrir el dashboard de la extensión, se iniciará automáticamente la extracc
 
 La API nueva expondrá los catálogos necesarios con identificadores estables y relaciones. Cada selección restringirá la consulta siguiente: temporada limita categorías; temporada y categoría limitan competiciones; la competición limita jornadas y partidos; el partido limita equipos. Las opciones de jugador/plantilla estarán disponibles para validar la asociación del dorsal en el contexto final. La extensión reiniciará las selecciones descendientes cuando cambie una antecesora.
 
+La interfaz deja visibles los errores HTTP/red y ofrece una acción para volver a solicitar el primer catálogo, en vez de mantener los combos en un estado de carga indefinido.
+
 **Alternativa considerada:** descargar listas globales como hace `/api/federation/options` y filtrarlas localmente. Se descarta porque puede mostrar combinaciones inexistentes y requiere más datos innecesarios en el navegador.
 
 ### Endpoint nuevo con actualización parcial
@@ -46,7 +48,7 @@ La persistencia actualizará únicamente `t2_anotados`, `t2_intentados`, `t3_ano
 
 ### Documentación interactiva de la API
 
-La API servirá un documento OpenAPI 3.0 en `/openapi.json` y Swagger UI en `/api-docs`, documentando salud, opciones e importaciones de Federación y estadísticas complementarias. La especificación describirá el Bearer token requerido por la ruta de escritura complementaria.
+La API servirá un documento OpenAPI 3.0 en `/openapi.json` y Swagger UI en `/api-docs`, documentando salud, opciones e importaciones de Federación y estadísticas complementarias. La nueva ruta de escritura seguirá el mismo modelo de acceso público que la importación existente.
 
 **Alternativa considerada:** documentar solo en README. Se descarta porque no permite inspeccionar ni probar las operaciones de forma interactiva.
 

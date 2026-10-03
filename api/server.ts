@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { normalizeFederationMatch } from '../src/services/federationNormalizer.js';
 import { persistFederationMatchToLegacy } from '../src/services/federationLegacyWriter.js';
-import { getComplementaryStatsOptions, hasValidBearerToken, importComplementaryStats } from './complementaryStats.js';
+import { getComplementaryStatsOptions, importComplementaryStats } from './complementaryStats.js';
 import swaggerUi from 'swagger-ui-express';
 import { openApiDocument } from './openapi.js';
 
@@ -112,18 +112,7 @@ app.get('/api/complementary-stats/options', async (req, res) => {
   }
 });
 
-app.post('/api/complementary-stats/import', (req, res, next) => {
-  const expectedToken = process.env.COMPLEMENTARY_STATS_API_TOKEN;
-  if (!expectedToken?.trim()) {
-    res.status(503).json({ ok: false, error: 'Complementary statistics import is not configured' });
-    return;
-  }
-  if (!hasValidBearerToken(expectedToken, req.get('authorization'))) {
-    res.status(401).json({ ok: false, error: 'Invalid or missing import token' });
-    return;
-  }
-  next();
-}, async (req, res) => {
+app.post('/api/complementary-stats/import', async (req, res) => {
   if (!supabase) {
     res.status(503).json({ ok: false, error: 'Supabase client is not configured' });
     return;

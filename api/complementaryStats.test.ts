@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getComplementaryStatsOptions, hasValidBearerToken, importComplementaryStats } from './complementaryStats.js';
+import { getComplementaryStatsOptions, importComplementaryStats } from './complementaryStats.js';
 
 type Row = Record<string, any>;
 
@@ -74,13 +74,6 @@ const validRow = {
   jerseyNumber: '2', playerName: 'Victor', t2Made: 6, t2Attempted: 16, t3Made: 0, t3Attempted: 0,
   tlMade: 5, tlAttempted: 12, rebounds: 4, assists: 0, steals: 1, turnovers: 5
 };
-
-test('requires the configured Bearer token for complementary writes', () => {
-  assert.equal(hasValidBearerToken('private-token', 'Bearer private-token'), true);
-  assert.equal(hasValidBearerToken('private-token', 'Bearer wrong-token'), false);
-  assert.equal(hasValidBearerToken('private-token', undefined), false);
-  assert.equal(hasValidBearerToken(undefined, 'Bearer private-token'), false);
-});
 
 test('returns only categories related to the selected season', async () => {
   const database = new MemoryDatabase();

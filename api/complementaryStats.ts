@@ -1,5 +1,3 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
-
 type SupabaseLike = {
   from: (table: string) => any;
 };
@@ -28,13 +26,6 @@ type ImportRow = {
   assists: number;
   steals: number;
   turnovers: number;
-};
-
-export const hasValidBearerToken = (expectedToken: string | undefined, authorizationHeader: string | undefined): boolean => {
-  const expected = expectedToken?.trim();
-  const supplied = authorizationHeader?.match(/^Bearer\s+(\S+)$/i)?.[1];
-  if (!expected || !supplied) return false;
-  return timingSafeEqual(createHash('sha256').update(supplied).digest(), createHash('sha256').update(expected).digest());
 };
 
 const isId = (value: unknown): value is string =>
