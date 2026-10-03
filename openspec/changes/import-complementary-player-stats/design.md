@@ -26,6 +26,8 @@ La funcionalidad se añade como un flujo/extensión específico para Estad-stiqu
 
 La pantalla fuente presenta estadísticas acumuladas sobre los partidos incluidos en sus filtros. Por ello, la extensión solo permitirá continuar cuando pueda confirmar que hay exactamente un partido incluido; antes del envío, el usuario deberá confirmar que ese partido es el mismo que seleccionó en el formulario. No se asignarán acumulados de varios partidos a una fila de un partido individual.
 
+Al abrir el dashboard de la extensión, se iniciará automáticamente la extracción de la pestaña de origen; la acción de captura queda disponible como reintento. La URL base de la API residirá en `extension-stats/config.js`, fuera de los scripts de UI/transporte, y el service worker la cargará al iniciar. El host configurado deberá estar permitido en `manifest.json`.
+
 **Alternativa considerada:** capturar datos desde una API interna o variables globales del sitio. Se descarta como contrato inicial porque la fuente confirmada por la solicitud es la tabla visible y no se dispone de un payload estable documentado. La extracción debe fallar con un mensaje útil si no reconoce columnas o filas, nunca enviar una tabla vacía como éxito.
 
 ### Catálogos en el backend y filtros relacionados
@@ -41,6 +43,12 @@ Se añadirá un endpoint específico para recibir el contexto seleccionado y una
 La persistencia actualizará únicamente `t2_anotados`, `t2_intentados`, `t3_anotados`, `t3_intentados`, `t1_anotados`, `t1_intentados`, `rebotes_totales`, `asistencias`, `robos` y `perdidas` de la fila ya existente de `estadisticas_jugador_partido`. El dorsal se usa para resolver `jugador_id`; el nombre solo se presenta en la grid y no se persiste desde esta operación. No se usará upsert de la fila completa, para no poner a cero ni sobrescribir estadísticas ajenas a este flujo.
 
 **Alternativa considerada:** reutilizar `/api/federation/import` o el escritor federativo. Se descarta porque ambos importan un modelo de partido distinto y el escritor actual rellena un conjunto más amplio de campos.
+
+### Documentación interactiva de la API
+
+La API servirá un documento OpenAPI 3.0 en `/openapi.json` y Swagger UI en `/api-docs`, documentando salud, opciones e importaciones de Federación y estadísticas complementarias. La especificación describirá el Bearer token requerido por la ruta de escritura complementaria.
+
+**Alternativa considerada:** documentar solo en README. Se descarta porque no permite inspeccionar ni probar las operaciones de forma interactiva.
 
 ### Valores de la grid y mapeo
 

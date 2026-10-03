@@ -13,7 +13,7 @@
         <p class="eyebrow">ESTADÍSTIQUES · IMPORTACIÓN</p>
         <h1>Estadísticas complementarias</h1>
       </div>
-      <button id="extract-button" class="button button-primary" type="button">Extraer plantilla</button>
+      <button id="extract-button" class="button button-primary" type="button">Volver a extraer</button>
     </header>
 
     <main>
@@ -61,7 +61,7 @@
               </tr>
             </thead>
             <tbody id="grid-body">
-              <tr class="empty-row"><td colspan="12">Usa “Extraer plantilla” en la página del partido.</td></tr>
+              <tr class="empty-row"><td colspan="12">Capturando la plantilla de la página del partido...</td></tr>
             </tbody>
           </table>
         </div>
@@ -74,11 +74,10 @@
       <details class="settings">
         <summary>Configuración de API</summary>
         <div class="settings-grid">
-          <label>URL base<input id="api-base-url" type="url" autocomplete="url" /></label>
           <label>Token de importación<input id="api-token" type="password" autocomplete="off" /></label>
           <button id="save-settings" class="button button-secondary" type="button">Guardar configuración</button>
         </div>
-        <p class="section-note">El token se guarda en el almacenamiento local de esta extensión y no se incluye en el código fuente.</p>
+        <p class="section-note">La URL de API se lee desde config.js. El token se guarda en el almacenamiento local de esta extensión.</p>
       </details>
     </main>
 

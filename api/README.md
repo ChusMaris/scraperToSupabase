@@ -39,6 +39,8 @@ npm start
 
 ## Endpoint
 
+Interactive OpenAPI documentation is served at `/api-docs`; the raw OpenAPI document is available at `/openapi.json`. The API currently exposes health, federation options/import, and complementary-statistics options/import operations.
+
 The extension loads its editable catalog suggestions from the existing legacy tables through:
 
 ```http

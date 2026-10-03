@@ -85,3 +85,32 @@ The system SHALL update only `t2_anotados`, `t2_intentados`, `t3_anotados`, `t3_
 #### Scenario: Same complementary data is imported again
 - **WHEN** a user resubmits the same match/team/player data
 - **THEN** the API SHALL update the same existing records without creating duplicate player-statistics rows
+
+### Requirement: Extension captures source data automatically on open
+The system SHALL start extracting the active statistics page when the import dashboard opens, without requiring the user to click the extraction action.
+
+#### Scenario: Dashboard opens for a supported source page
+- **WHEN** the dashboard is opened from a supported statistics page
+- **THEN** the extension SHALL automatically capture and display the table while catalog options load
+
+#### Scenario: Automatic capture fails
+- **WHEN** automatic extraction cannot find or parse the table
+- **THEN** the dashboard SHALL display the extraction error and SHALL allow the user to retry manually
+
+### Requirement: API base URL comes from a separate configuration file
+The system SHALL read the API base URL from a dedicated configuration file rather than embedding it in the dashboard or transport logic.
+
+#### Scenario: API host is changed for deployment
+- **WHEN** an operator changes the configured API base URL and allows that host in the extension manifest
+- **THEN** the extension SHALL send catalog and import requests to the configured API host
+
+### Requirement: API operations are discoverable through OpenAPI and Swagger UI
+The system SHALL serve an OpenAPI document for its HTTP operations and provide an interactive Swagger UI.
+
+#### Scenario: User opens the API documentation
+- **WHEN** a user navigates to `/api-docs`
+- **THEN** the API SHALL display documentation for health, federation, and complementary statistics operations, including request parameters and authentication requirements
+
+#### Scenario: Client requests the OpenAPI document
+- **WHEN** a client requests `/openapi.json`
+- **THEN** the API SHALL return a valid OpenAPI 3.0 document describing those operations

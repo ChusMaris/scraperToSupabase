@@ -1,4 +1,6 @@
-const DEFAULT_API_BASE_URL = 'http://localhost:4000';
+importScripts('config.js');
+
+const DEFAULT_API_BASE_URL = self.STATS_EXTENSION_CONFIG.apiBaseUrl;
 
 chrome.action.onClicked.addListener(async (tab) => {
   const dashboardUrl = new URL(chrome.runtime.getURL('dashboard.html'));

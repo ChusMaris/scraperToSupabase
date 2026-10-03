@@ -5,8 +5,11 @@ La web de Estad-stiques- muestra estadísticas de tiro y rendimiento individual 
 ## What Changes
 
 - Añadir una extensión Chrome para `https://pinetys.github.io/Estad-stiques-/` que lea la tabla visible del partido y muestre una grid editable.
+- Capturar automáticamente la plantilla al abrir la vista de importación y mantener una acción manual para volver a extraerla.
+- Leer la URL base de la API desde un fichero de configuración separado de los scripts de la extensión.
 - Añadir selectores dependientes para temporada, categoría, competición, jornada, partido y equipo, alimentados por los datos existentes.
 - Enviar desde la extensión un JSON con el contexto seleccionado y las filas editadas a un método nuevo de la API Scraper.
+- Publicar una especificación OpenAPI y una interfaz Swagger UI para consultar y probar las rutas existentes y nuevas.
 - Validar en la API el contexto, el formato y la correspondencia de cada dorsal con un único jugador del equipo en el partido; rechazar ambigüedades sin escribir datos.
 - Actualizar exclusivamente estadísticas complementarias existentes: T2 anotados/intentados, T3 anotados/intentados, T1 anotados/intentados, rebotes totales, asistencias, robos y pérdidas. No reemplazar el resto de estadísticas ni crear tablas nuevas.
 

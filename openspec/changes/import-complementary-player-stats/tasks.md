@@ -7,6 +7,8 @@
 - [x] 1.5 Leer el contador de partidos incluidos, bloquear cero o múltiples partidos y pedir confirmación de que el único incluido coincide con el partido seleccionado.
 - [x] 1.6 Implementar selectores encadenados para temporada, categoría, competición, jornada, partido y equipo; limpiar selecciones descendientes al cambiar contexto.
 - [x] 1.7 Enviar el contexto y las filas editadas como JSON al nuevo endpoint, mostrando validación, progreso y resultado por dorsal.
+- [x] 1.8 Iniciar automáticamente la captura al abrir el dashboard y conservar una acción para reintentar.
+- [x] 1.9 Leer la URL base desde un fichero de configuración dedicado, fuera de los scripts de la extensión.
 
 ## 2. API y persistencia
 
@@ -16,6 +18,7 @@
 - [x] 2.4 Resolver cada dorsal a un único jugador/registro de estadísticas dentro del partido y equipo seleccionados; devolver error claro para ausencias o ambigüedades.
 - [x] 2.5 Actualizar solo los diez campos complementarios especificados sin usar upsert de la fila completa ni crear registros ausentes.
 - [x] 2.6 Definir y aplicar el mecanismo de autorización del endpoint antes de habilitar escrituras en producción.
+- [x] 2.7 Publicar el documento OpenAPI y Swagger UI para las rutas actuales y nuevas.
 
 ## 3. Verificación y documentación
 
@@ -24,3 +27,4 @@
 - [x] 3.3 Añadir prueba de persistencia que demuestre que puntos, minutos y demás columnas ajenas permanecen intactos.
 - [x] 3.4 Probar una importación controlada contra un partido existente del fixture y verificar recarga idempotente y conteo de filas actualizadas.
 - [x] 3.5 Documentar instalación/desarrollo de la extensión, configuración de API y uso del contrato nuevo.
+- [x] 3.6 Documentar las URLs `/api-docs` y `/openapi.json` y probar la respuesta de ambas rutas.

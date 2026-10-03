@@ -1,5 +1,5 @@
-const DEFAULT_API_BASE_URL = 'http://localhost:4000';
-const targetTabId = Number(new URLSearchParams(location.search).get('targetTabId'));
+const targetTabValue = new URLSearchParams(location.search).get('targetTabId');
+const targetTabId = targetTabValue === null ? Number.NaN : Number(targetTabValue);
 const selectIds = ['season', 'category', 'competition', 'matchday', 'match', 'team'];
 const statFields = [
   ['t2Made', 'T2M'], ['t2Attempted', 'T2A'], ['t3Made', 'T3M'], ['t3Attempted', 'T3A'],
@@ -8,10 +8,11 @@ const statFields = [
 ];
 let extractedRows = [];
 let includedMatchCount = null;
+let captureInProgress = false;
 
 const elements = Object.fromEntries([
   'status', 'context-state', 'grid-meta', 'grid-body', 'extract-button', 'submit-button',
-  'single-match-confirmation', 'api-base-url', 'api-token', 'save-settings'
+  'single-match-confirmation', 'api-token', 'save-settings'
 ].map((id) => [id, document.getElementById(id)]));
 
 const setStatus = (message, kind = 'info') => {
@@ -144,7 +145,7 @@ const extractFromPage = async () => {
 const loadInitialOptions = async () => {
   try {
     await setOptions('season', 'seasons', {}, 'Selecciona temporada');
-    setStatus('Catálogos listos. Selecciona el contexto del partido.');
+    if (!captureInProgress && !extractedRows.length) setStatus('Catálogos listos. Selecciona el contexto del partido.');
   } catch (error) {
     setStatus(`No se pudieron cargar los catálogos: ${error.message}`, 'error');
   }
@@ -191,8 +192,9 @@ selectIds.forEach((id) => document.getElementById(id).addEventListener('change',
 elements['single-match-confirmation'].addEventListener('change', updateSubmitState);
 elements['grid-body'].addEventListener('input', updateSubmitState);
 
-elements['extract-button'].addEventListener('click', async () => {
+const captureCurrentPage = async () => {
   elements['extract-button'].disabled = true;
+  captureInProgress = true;
   setStatus('Leyendo la plantilla y verificando los partidos incluidos...');
   try {
     const response = await extractFromPage();
@@ -212,8 +214,13 @@ elements['extract-button'].addEventListener('click', async () => {
     renderGrid();
     setStatus(error.message, 'error');
   } finally {
+    captureInProgress = false;
     elements['extract-button'].disabled = false;
   }
+};
+
+elements['extract-button'].addEventListener('click', () => {
+  void captureCurrentPage();
 });
 
 const collectEditedRows = () => {
@@ -260,20 +267,13 @@ elements['submit-button'].addEventListener('click', async () => {
 });
 
 elements['save-settings'].addEventListener('click', async () => {
-  const baseUrl = elements['api-base-url'].value.trim().replace(/\/+$/, '');
   const token = elements['api-token'].value.trim();
-  if (!/^https?:\/\//i.test(baseUrl)) {
-    setStatus('La URL base debe comenzar con http:// o https://.', 'error');
-    return;
-  }
-  const values = { complementaryStatsApiBaseUrl: baseUrl };
-  if (token) values.complementaryStatsApiToken = token;
-  await chrome.storage.local.set(values);
+  if (token) await chrome.storage.local.set({ complementaryStatsApiToken: token });
+  else await chrome.storage.local.remove('complementaryStatsApiToken');
   setStatus('Configuración guardada en esta extensión.', 'success');
 });
 
-chrome.storage.local.get(['complementaryStatsApiBaseUrl', 'complementaryStatsApiToken']).then((stored) => {
-  elements['api-base-url'].value = stored.complementaryStatsApiBaseUrl || DEFAULT_API_BASE_URL;
+chrome.storage.local.get(['complementaryStatsApiToken']).then((stored) => {
   elements['api-token'].value = stored.complementaryStatsApiToken || '';
 });
 
@@ -285,7 +285,9 @@ if (!Number.isInteger(targetTabId) || targetTabId < 0) {
     if (!tab.url?.startsWith('https://pinetys.github.io/Estad-stiques-/')) {
       elements['extract-button'].disabled = true;
       setStatus('La pestaña de origen no es una página de Estad-stiques-.', 'error');
+      return;
     }
+    void captureCurrentPage();
   }).catch(() => {
     elements['extract-button'].disabled = true;
     setStatus('No se pudo recuperar la página de origen.', 'error');

@@ -14,7 +14,7 @@ The extension ignores PJ, MIN, PTS and VAL. For T2, T3 and TL it imports only ma
 
 ## API configuration
 
-The default API base URL is `http://localhost:4000`. Set the deployed API base URL in the extension settings after the new routes have been deployed. The configured API host must be present in `manifest.json` under `host_permissions` before it can be used.
+The API base URL is maintained in `config.js`, separately from the extension's capture and UI scripts. Update `apiBaseUrl` to the deployed API origin when deploying to another host. Chrome also requires that origin in `manifest.json` under `host_permissions`.
 
 The shared token is stored in the local Chrome profile, not in the extension source. Install this extension only for trusted operators. The API's Bearer check protects its import route; it does not change the existing public Supabase RLS policies.
 

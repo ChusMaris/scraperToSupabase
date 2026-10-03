@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 import { normalizeFederationMatch } from '../src/services/federationNormalizer.js';
 import { persistFederationMatchToLegacy } from '../src/services/federationLegacyWriter.js';
 import { getComplementaryStatsOptions, hasValidBearerToken, importComplementaryStats } from './complementaryStats.js';
+import swaggerUi from 'swagger-ui-express';
+import { openApiDocument } from './openapi.js';
 
 dotenv.config();
 
@@ -39,6 +41,12 @@ const validateBundle = (body: any) => {
 app.get('/health', (_req, res) => {
   res.json({ ok: true, status: 'healthy' });
 });
+
+app.get('/openapi.json', (_req, res) => {
+  res.json(openApiDocument);
+});
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
 
 app.get('/api/federation/options', async (_req, res) => {
   if (!supabase) {
