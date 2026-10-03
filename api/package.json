@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "tsx watch server.ts",
     "start": "tsx server.ts",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "test": "tsx --test complementaryStats.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.100.1",

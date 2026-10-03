@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Importar estadísticas complementarias</title>
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-mark" aria-hidden="true">ST</div>
+      <div class="brand-copy">
+        <p class="eyebrow">ESTADÍSTIQUES · IMPORTACIÓN</p>
+        <h1>Estadísticas complementarias</h1>
+      </div>
+      <button id="extract-button" class="button button-primary" type="button">Extraer plantilla</button>
+    </header>
+
+    <main>
+      <p id="status" class="status" role="status" aria-live="polite">Selecciona el contexto del partido.</p>
+
+      <section class="context-section" aria-labelledby="context-heading">
+        <div class="section-heading">
+          <h2 id="context-heading">Contexto de destino</h2>
+          <span id="context-state" class="section-note">Temporada requerida</span>
+        </div>
+        <div class="context-grid">
+          <label>Temporada<select id="season"><option value="">Cargando temporadas...</option></select></label>
+          <label>Categoría<select id="category" disabled><option value="">Selecciona temporada</option></select></label>
+          <label>Competición<select id="competition" disabled><option value="">Selecciona categoría</option></select></label>
+          <label>Jornada<select id="matchday" disabled><option value="">Selecciona competición</option></select></label>
+          <label class="match-field">Partido<select id="match" disabled><option value="">Selecciona jornada</option></select></label>
+          <label>Equipo<select id="team" disabled><option value="">Selecciona partido</option></select></label>
+        </div>
+      </section>
+
+      <section class="grid-section" aria-labelledby="grid-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="grid-heading">Plantilla extraída</h2>
+            <p id="grid-meta" class="section-note">Aún no hay datos capturados</p>
+          </div>
+          <button id="submit-button" class="button button-accent" type="button" disabled>Enviar a la API</button>
+        </div>
+        <div class="table-frame">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">Jugador</th>
+                <th scope="col">T2M</th>
+                <th scope="col">T2A</th>
+                <th scope="col">T3M</th>
+                <th scope="col">T3A</th>
+                <th scope="col">TLN</th>
+                <th scope="col">TLA</th>
+                <th scope="col">REB</th>
+                <th scope="col">AST</th>
+                <th scope="col">ROB</th>
+                <th scope="col">PER</th>
+              </tr>
+            </thead>
+            <tbody id="grid-body">
+              <tr class="empty-row"><td colspan="12">Usa “Extraer plantilla” en la página del partido.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <label class="confirmation">
+          <input id="single-match-confirmation" type="checkbox" disabled />
+          <span>Confirmo que el único partido incluido en la página es el partido seleccionado arriba.</span>
+        </label>
+      </section>
+
+      <details class="settings">
+        <summary>Configuración de API</summary>
+        <div class="settings-grid">
+          <label>URL base<input id="api-base-url" type="url" autocomplete="url" /></label>
+          <label>Token de importación<input id="api-token" type="password" autocomplete="off" /></label>
+          <button id="save-settings" class="button button-secondary" type="button">Guardar configuración</button>
+        </div>
+        <p class="section-note">El token se guarda en el almacenamiento local de esta extensión y no se incluye en el código fuente.</p>
+      </details>
+    </main>
+
+    <script src="dashboard.js"></script>
+  </body>
+</html>

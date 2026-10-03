@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { normalizeFederationMatch } from '../src/services/federationNormalizer.js';
 import { persistFederationMatchToLegacy } from '../src/services/federationLegacyWriter.js';
+import { getComplementaryStatsOptions, hasValidBearerToken, importComplementaryStats } from './complementaryStats.js';
 
 dotenv.config();
 
@@ -78,6 +79,63 @@ app.get('/api/federation/options', async (_req, res) => {
     const message = error instanceof Error ? error.message : 'Unknown catalog query error';
     console.error('[api] Catalog query failed:', message);
     res.status(500).json({ ok: false, error: message });
+  }
+});
+
+app.get('/api/complementary-stats/options', async (req, res) => {
+  if (!supabase) {
+    res.status(503).json({ ok: false, error: 'Supabase client is not configured' });
+    return;
+  }
+
+  try {
+    const parameters = new URLSearchParams();
+    for (const [key, value] of Object.entries(req.query)) {
+      if (typeof value === 'string') parameters.set(key, value);
+    }
+    const options = await getComplementaryStatsOptions(supabase, parameters);
+    res.json({ ok: true, options });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown catalog query error';
+    const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
+      ? Number(error.statusCode) || 400
+      : 500;
+    res.status(statusCode).json({ ok: false, error: message });
+  }
+});
+
+app.post('/api/complementary-stats/import', (req, res, next) => {
+  const expectedToken = process.env.COMPLEMENTARY_STATS_API_TOKEN;
+  if (!expectedToken?.trim()) {
+    res.status(503).json({ ok: false, error: 'Complementary statistics import is not configured' });
+    return;
+  }
+  if (!hasValidBearerToken(expectedToken, req.get('authorization'))) {
+    res.status(401).json({ ok: false, error: 'Invalid or missing import token' });
+    return;
+  }
+  next();
+}, async (req, res) => {
+  if (!supabase) {
+    res.status(503).json({ ok: false, error: 'Supabase client is not configured' });
+    return;
+  }
+
+  try {
+    const result = await importComplementaryStats(supabase, req.body?.context, req.body?.rows);
+    console.info(`[api] Complementary player statistics updated: ${result.updatedRows} rows for ${result.teamName}.`);
+    res.status(200).json({ ok: true, ...result });
+  } catch (error) {
+    const details = typeof error === 'object' && error !== null ? error as Record<string, unknown> : {};
+    const message = error instanceof Error ? error.message : 'Unknown complementary statistics import error';
+    const statusCode = typeof details.statusCode === 'number' ? details.statusCode : 500;
+    res.status(statusCode).json({
+      ok: false,
+      error: message,
+      ...(typeof details.failedJersey === 'string' ? { failedJersey: details.failedJersey } : {}),
+      ...(typeof details.updatedRows === 'number' ? { updatedRows: details.updatedRows } : {}),
+      ...(Array.isArray(details.updatedDorsals) ? { updatedDorsals: details.updatedDorsals } : {})
+    });
   }
 });
 

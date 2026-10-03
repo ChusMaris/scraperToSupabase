@@ -1,0 +1,110 @@
+:root {
+  color-scheme: light;
+  font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+  color: #17242b;
+  background: #eef1ed;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; min-width: 700px; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 28px;
+  color: #f5f7f3;
+  background: #152b2b;
+  border-bottom: 4px solid #d96b38;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  aspect-ratio: 1;
+  border: 1px solid #8ba69d;
+  border-radius: 50%;
+  color: #d9ef79;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.brand-copy { flex: 1; }
+.eyebrow { margin: 0 0 3px; color: #b5c7bd; font-size: 10px; font-weight: 700; }
+h1 { margin: 0; font-size: 19px; font-weight: 650; }
+
+main { max-width: 1480px; margin: 0 auto; padding: 20px 28px 40px; }
+.status { min-height: 22px; margin: 0 0 16px; color: #52645e; font-size: 13px; }
+.status[data-kind="error"] { color: #a6382d; }
+.status[data-kind="success"] { color: #28714d; }
+
+.context-section, .grid-section { padding: 16px 0 20px; border-top: 1px solid #ccd4cf; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+h2 { margin: 0; font-size: 15px; font-weight: 750; }
+.section-note { color: #687771; font-size: 12px; }
+.context-grid { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)); gap: 12px; }
+label { display: grid; gap: 6px; color: #586761; font-size: 11px; font-weight: 700; }
+select, input:not([type="checkbox"]) {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #bdc8c1;
+  border-radius: 4px;
+  background: #fbfcf9;
+  color: #17242b;
+  font: inherit;
+  font-size: 13px;
+}
+select:disabled { color: #98a29e; background: #e5e9e4; }
+
+.button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.button:disabled { cursor: not-allowed; opacity: .48; }
+.button-primary { color: #fff; background: #d95d27; }
+.button-accent { color: #18302c; background: #d9ef79; }
+.button-secondary { color: #fff; background: #36564e; }
+
+.table-frame { overflow: auto; border: 1px solid #cbd4ce; background: #fbfcf9; }
+table { width: 100%; min-width: 1080px; border-collapse: collapse; font-size: 12px; }
+thead { background: #e0e7e1; }
+th { padding: 10px 8px; color: #4c5b55; font-size: 10px; text-align: right; white-space: nowrap; }
+th:first-child, th:nth-child(2) { text-align: left; }
+td { height: 44px; padding: 5px 7px; border-top: 1px solid #e1e6e2; text-align: right; }
+td.player-cell { min-width: 165px; color: #31443d; text-align: left; font-weight: 650; }
+td.jersey-cell { min-width: 76px; }
+td input { min-width: 54px; min-height: 31px !important; padding: 5px !important; text-align: right; }
+td.jersey-cell input { min-width: 64px; }
+.empty-row td { height: 72px; color: #84918a; text-align: center; }
+.confirmation { display: flex; align-items: flex-start; gap: 8px; max-width: max-content; margin: 14px 0 0; color: #44534d; font-size: 12px; font-weight: 550; }
+.confirmation input { margin: 0; accent-color: #28714d; }
+
+.settings { margin-top: 12px; padding: 14px 0; border-top: 1px solid #ccd4cf; color: #33463f; }
+.settings summary { cursor: pointer; font-size: 12px; font-weight: 750; }
+.settings-grid { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(220px, 1fr) auto; align-items: end; gap: 12px; margin-top: 14px; }
+.settings > .section-note { margin: 10px 0 0; }
+
+@media (max-width: 840px) {
+  body { min-width: 360px; }
+  .topbar { align-items: flex-start; flex-wrap: wrap; padding: 16px; }
+  .brand-copy { min-width: calc(100% - 60px); }
+  .topbar .button { width: 100%; }
+  main { padding: 16px; }
+  .context-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+  .settings-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .context-grid { grid-template-columns: 1fr; }
+  .section-heading { align-items: flex-start; flex-direction: column; }
+}

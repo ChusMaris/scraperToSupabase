@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Estadístiques - Importador de plantilla",
+  "version": "0.1.0",
+  "description": "Revisa e importa estadísticas complementarias de un partido.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://pinetys.github.io/Estad-stiques-/*",
+    "http://localhost:4000/*",
+    "https://scrapertosupabase.onrender.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://pinetys.github.io/Estad-stiques-/*"
+      ],
+      "js": ["parse-stats.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Importar estadísticas de plantilla"
+  }
+}
