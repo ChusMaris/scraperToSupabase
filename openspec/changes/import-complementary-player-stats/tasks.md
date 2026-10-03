@@ -20,6 +20,7 @@
 - [x] 2.5 Actualizar solo los diez campos complementarios especificados sin usar upsert de la fila completa ni crear registros ausentes.
 - [x] 2.6 Mantener el mismo modelo de acceso público que el endpoint de importación federativa existente.
 - [x] 2.7 Publicar el documento OpenAPI y Swagger UI para las rutas actuales y nuevas.
+- [x] 2.8 Permitir CORS desde Chrome y comprobar la respuesta al preflight de la extensión.
 
 ## 3. Verificación y documentación
 

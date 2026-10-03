@@ -38,6 +38,10 @@ La interfaz deja visibles los errores HTTP/red y ofrece una acción para volver 
 
 **Alternativa considerada:** descargar listas globales como hace `/api/federation/options` y filtrarlas localmente. Se descarta porque puede mostrar combinaciones inexistentes y requiere más datos innecesarios en el navegador.
 
+### Acceso cross-origin desde Chrome
+
+La API devolverá `Access-Control-Allow-Origin: *` y permitirá `GET`, `POST` y `OPTIONS`, con los headers `Accept` y `Content-Type`, para que el service worker de la extensión pueda consultar y enviar datos desde el origen `chrome-extension://`. No se usan cookies ni credenciales de navegador. Esta política solo habilita CORS y no autentica ni autoriza usuarios.
+
 ### Endpoint nuevo con actualización parcial
 
 Se añadirá un endpoint específico para recibir el contexto seleccionado y una lista de filas editadas. Antes de escribir, validará campos numéricos enteros no negativos, pertenencia del partido a la competición/jornada, pertenencia del equipo al partido y correspondencia unívoca de cada dorsal con un jugador del equipo y partido. Una ausencia o ambigüedad rechazará el lote con detalle por fila y sin escrituras.

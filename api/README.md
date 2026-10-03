@@ -40,6 +40,8 @@ npm start
 
 Interactive OpenAPI documentation is served at `/api-docs`; the raw OpenAPI document is available at `/openapi.json`. The API currently exposes health, federation options/import, and complementary-statistics options/import operations.
 
+The Express API enables CORS for browser-extension requests (`GET`, `POST`, and `OPTIONS`). CORS is required for the Chrome extension to read catalog responses; it is not an authorization mechanism.
+
 The extension loads its editable catalog suggestions from the existing legacy tables through:
 
 ```http

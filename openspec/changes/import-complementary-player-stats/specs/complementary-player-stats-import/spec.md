@@ -115,6 +115,17 @@ The system SHALL explain why catalog options could not be loaded and allow the o
 - **WHEN** the operator activates the catalog reload action
 - **THEN** the extension SHALL request the seasons catalog again and update the selector state
 
+### Requirement: API permits requests from the Chrome extension origin
+The system SHALL return CORS headers for the extension's cross-origin catalog and import requests without relying on cookies or browser credentials.
+
+#### Scenario: Extension fetches catalog options
+- **WHEN** the extension service worker requests catalog options from the API
+- **THEN** the response SHALL include `Access-Control-Allow-Origin` and SHALL be readable by the extension
+
+#### Scenario: Browser sends a preflight request
+- **WHEN** the browser sends an `OPTIONS` preflight for an API `GET` or `POST`
+- **THEN** the API SHALL allow the requested method and the `Accept` and `Content-Type` headers
+
 ### Requirement: API operations are discoverable through OpenAPI and Swagger UI
 The system SHALL serve an OpenAPI document for its HTTP operations and provide an interactive Swagger UI.
 
