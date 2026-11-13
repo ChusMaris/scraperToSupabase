@@ -176,6 +176,19 @@ const slugFromText = (value: string): string => {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'entity';
 };
 
+const playerIdFrom = (uuid: unknown, name: unknown, dorsal: unknown): string => {
+  if (typeof uuid === 'string' && uuid.trim()) {
+    return slugFromText(`player-${uuid}`);
+  }
+  return slugFromText(`${typeof name === 'string' ? name : 'player'}-${String(dorsal ?? 'unknown')}`);
+};
+
+const textValue = (value: unknown): string | null => {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
+};
+
 const toUuid = (value: unknown): string | null => {
   if (typeof value === 'string' && /^[0-9a-fA-F-]{36}$/.test(value)) {
     return value;
@@ -246,6 +259,11 @@ export const normalizeFederationMatch = (
 
   const players: FederationPlayerRecord[] = [];
   const rosters: FederationRosterRecord[] = [];
+  const teamIdsByUuid = new Map<string, string>();
+  const playerTeamIdsByUuid = new Map<string, string>();
+  for (const team of teams) {
+    if (team.externalUuid) teamIdsByUuid.set(team.externalUuid, team.id);
+  }
 
   for (const boxscoreEntry of boxscore) {
     const localSide = pickBoxscoreSide(boxscoreEntry, 'local');
@@ -254,12 +272,18 @@ export const normalizeFederationMatch = (
     const addPlayersFromSide = (teamSide: any, teamId: string, teamName: string) => {
       if (!teamSide?.players || !Array.isArray(teamSide.players)) return;
       for (const player of teamSide.players) {
-        const playerId = slugFromText(`${player.name ?? 'player'}-${player.uuid ?? String(player.dorsal ?? 'unknown')}`);
+        const playerUuid = textValue(player.uuid);
+        const playerName = textValue(player.name);
+        const dorsal = textValue(player.dorsal);
+        if (playerUuid) playerTeamIdsByUuid.set(playerUuid, teamId);
+        if (!playerName) continue;
+
+        const playerId = playerIdFrom(playerUuid, playerName, dorsal);
         players.push({
           id: playerId,
-          name: player.name ?? 'Unknown player',
+          name: playerName,
           shortName: player.shortName ?? null,
-          dorsal: player.dorsal ?? null,
+          dorsal,
           captain: Boolean(player.captain),
           starting: Boolean(player.starting),
           teamId,
@@ -280,6 +304,48 @@ export const normalizeFederationMatch = (
 
     addPlayersFromSide(localSide, localTeamId, localTeam.name ?? 'Local team');
     addPlayersFromSide(visitorSide, visitorTeamId, visitorTeam.name ?? 'Visitor team');
+  }
+
+  for (const event of playByPlay) {
+    const playerUuid = textValue(event.uuid);
+    const playerName = textValue(event.actorName);
+    if (!playerName) continue;
+
+    const playerId = playerIdFrom(playerUuid, playerName, event.dorsal);
+    const eventTeamId = textValue(event.teamUuid)
+      ? teamIdsByUuid.get(String(event.teamUuid))
+      : undefined;
+    const teamId = eventTeamId ?? (playerUuid ? playerTeamIdsByUuid.get(playerUuid) : undefined) ?? null;
+    const teamName = teams.find(team => team.id === teamId)?.name ?? null;
+    const existingPlayer = players.find(player => player.id === playerId);
+    if (existingPlayer) {
+      if (!existingPlayer.teamId && teamId) {
+        existingPlayer.teamId = teamId;
+        existingPlayer.teamName = teamName;
+      }
+      continue;
+    }
+
+    players.push({
+      id: playerId,
+      name: playerName,
+      dorsal: textValue(event.dorsal),
+      starting: false,
+      captain: false,
+      teamId,
+      teamName,
+      externalUuid: toUuid(playerUuid)
+    });
+    if (teamId) {
+      rosters.push({
+        teamId,
+        playerId,
+        seasonName,
+        dorsal: textValue(event.dorsal),
+        captain: false,
+        starting: false
+      });
+    }
   }
 
   const dedupedPlayers = players.filter((player, index, all) => all.findIndex(item => item.id === player.id) === index);
@@ -323,7 +389,9 @@ export const normalizeFederationMatch = (
 
       if (Array.isArray(teamSide.players)) {
         for (const player of teamSide.players) {
-          const playerId = slugFromText(`${player.name ?? 'player'}-${player.uuid ?? String(player.dorsal ?? 'unknown')}`);
+          const playerName = textValue(player.name);
+          if (!playerName) continue;
+          const playerId = playerIdFrom(player.uuid, playerName, player.dorsal);
           const acc = player.accumulated ?? {};
           const comp = player.computed ?? {};
           const adv = player.advanced ?? {};
@@ -331,8 +399,8 @@ export const normalizeFederationMatch = (
             period: Number(boxscoreEntry.period ?? 0),
             teamId,
             playerId,
-            playerName: player.name ?? 'Unknown player',
-            dorsal: player.dorsal ?? null,
+            playerName,
+            dorsal: textValue(player.dorsal),
             captain: Boolean(player.captain),
             starting: Boolean(player.starting),
             pts: toNumber(acc.pts) ?? undefined,
@@ -360,18 +428,40 @@ export const normalizeFederationMatch = (
     mapTeamSide(visitorSide, visitorTeamId, visitorTeam.name ?? 'Visitor team', visitorTeam.shortName ?? null);
   }
 
-  const normalizedScoreEvolution: FederationScoreEvolutionRecord[] = scoreEvolution.map((entry: any) => ({
+  const derivedScoreEvolution: FederationScoreEvolutionRecord[] = [];
+  for (const event of playByPlay) {
+    const localScore = toNumber(event.localScore);
+    const visitorScore = toNumber(event.visitorScore);
+    if (localScore === null || visitorScore === null) continue;
+
+    const previous = derivedScoreEvolution.at(-1);
+    if (previous?.localScore === localScore && previous.visitorScore === visitorScore) continue;
+
+    derivedScoreEvolution.push({
+      period: Number(event.period ?? 0),
+      minute: toNumber(event.minute),
+      second: toNumber(event.second),
+      localScore,
+      visitorScore
+    });
+  }
+
+  const normalizedScoreEvolution: FederationScoreEvolutionRecord[] = scoreEvolution.length
+    ? scoreEvolution.map((entry: any) => ({
     period: Number(entry.period ?? 0),
     minute: toNumber(entry.minute) ?? null,
     second: toNumber(entry.second) ?? null,
     localScore: toNumber(entry.local) ?? toNumber(entry.localScore) ?? 0,
     visitorScore: toNumber(entry.visitor) ?? toNumber(entry.visitorScore) ?? 0
-  }));
+    }))
+    : derivedScoreEvolution;
 
   const normalizedEvents: FederationEventRecord[] = (playByPlay ?? []).map((event: any) => {
     const eventUuid = toUuid(event.eventUuid) ?? toUuid(event.uuid) ?? `${slugFromText(event.actorName ?? 'event')}-${event.period ?? 0}-${event.minute ?? 0}-${event.second ?? 0}`;
     const teamId = event.teamUuid ? slugFromText(`${event.teamUuid}`) : null;
-    const playerId = event.uuid ? slugFromText(`${event.actorName ?? 'player'}-${event.uuid}`) : null;
+    const playerId = textValue(event.actorName)
+      ? playerIdFrom(event.uuid, event.actorName, event.dorsal)
+      : null;
     return {
       eventUuid,
       matchId: localTeamId + '-' + visitorTeamId,
@@ -396,7 +486,9 @@ export const normalizeFederationMatch = (
   for (const shot of [...localShots, ...visitorShots]) {
     const eventUuid = toUuid(shot.eventUuid) ?? toUuid(shot.uuid) ?? `${slugFromText(shot.actorName ?? 'shot')}-${shot.period ?? 0}-${shot.x ?? 0}-${shot.y ?? 0}`;
     const teamId = shot.teamUuid ? slugFromText(`${shot.teamUuid}`) : null;
-    const playerId = shot.uuid ? slugFromText(`${shot.actorName ?? 'player'}-${shot.uuid}`) : null;
+    const playerId = shot.uuid && textValue(shot.actorName)
+      ? playerIdFrom(shot.uuid, shot.actorName, null)
+      : null;
     normalizedShots.push({
       eventUuid,
       matchId: localTeamId + '-' + visitorTeamId,

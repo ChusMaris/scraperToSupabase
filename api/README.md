@@ -1,6 +1,6 @@
 # Federation Import API
 
-This Express API receives the match payload captured by the Chrome extension, validates it, normalizes it with the canonical federation normalizer, and writes the result into Supabase.
+This Express API receives match payloads captured by the federation extensions, validates them, normalizes them with the canonical federation normalizer, and writes the result into Supabase.
 
 ## Environment
 
@@ -50,7 +50,9 @@ GET /api/federation/options
 
 This reads `temporadas`, `categorias`, `competiciones`, and `partidos` from the existing database.
 
-Federation imports are normalized and persisted to the existing legacy tables. No additional tables or SQL migration are required.
+Federation imports are normalized and persisted to the existing legacy tables. Imports from a live `/directe/<id>` page include `liveMatchId`; that optional field selects the stable match identity and the atomic snapshot-replacement RPC.
+
+Apply `supabase/migrations/20261109_replace_live_match_snapshot.sql` before deploying API clients that send `liveMatchId`. Requests without that field continue to use the existing persistence path.
 
 ```http
 POST /api/federation/import
@@ -62,9 +64,21 @@ Example body:
 ```json
 {
   "statsPayload": { "header": {}, "boxscore": [] },
-  "pbpPayload": { "playByPlay": [] }
+  "pbpPayload": { "playByPlay": [] },
+  "metadata": {
+    "temporada": "2026/27",
+    "categoria": "C.C. JÚNIOR",
+    "competicion": "FASE REGULAR",
+    "jornada": 1
+  },
+  "sourceUrl": "https://www.basquetcatala.cat/directe/302113",
+  "liveMatchId": "302113"
 }
 ```
+
+For a live import, both payloads must contain the complete federation structure: `statsPayload.header`, `statsPayload.boxscore`, and `pbpPayload.playByPlay`. Each request with the same `liveMatchId` updates the same match and atomically replaces its movements, score evolution, shots, and available player statistics with the received snapshot. Events without an actor remain match movements without a player association. Player rows without a name or numeric statistics are not turned into placeholder or zero-valued statistics.
+
+The extension user selects the season, category, competition, matchday, and refresh interval once for the direct-match ID, then explicitly starts or stops import. Leaving the direct URL stops future submissions. Deploy the RPC migration before enabling live import on clients.
 
 ## Complementary player statistics
 

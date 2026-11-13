@@ -53,13 +53,162 @@ const upsertOne = async (
   return data;
 };
 
+const persistLiveMatchSnapshot = async (
+  normalized: FederationNormalizedMatch,
+  matchRow: Record<string, unknown>,
+  database: any,
+  teamIds: Map<string, string>,
+  log: (message: string, type?: 'info' | 'success' | 'error' | 'data') => void
+): Promise<string> => {
+  const playerIds = new Map<string, string>();
+  const playerStats = new Map<string, FederationNormalizedMatch['playerStats'][number]>();
+  for (const stat of normalized.playerStats) {
+    if (stat.period === 0 || !playerStats.has(stat.playerId)) {
+      playerStats.set(stat.playerId, stat);
+    }
+  }
+
+  const numericStatFields = [
+    'pts', 't2m', 't2a', 't3m', 't3a', 'ftm', 'fta', 'fgm', 'fga', 'fc', 'secondsPlayed'
+  ] as const;
+  const hasNumericStats = (stat: FederationNormalizedMatch['playerStats'][number] | undefined) =>
+    Boolean(stat && numericStatFields.some(field => typeof stat[field] === 'number' && Number.isFinite(stat[field])));
+
+  log(`Preparando datos de ${normalized.players.length} jugadores del snapshot...`, 'info');
+  for (const player of normalized.players) {
+    const teamId = player.teamId ? teamIds.get(player.teamId) : undefined;
+    if (!teamId) continue;
+
+    const legacyPlayer = await upsertOne(database, 'jugadores', {
+      nombre_completo: player.name,
+      actor_id: toLegacyBigintId(player.externalUuid ?? player.id)
+    }, 'nombre_completo', `Jugador ${player.name}`);
+    playerIds.set(player.id, legacyPlayer.id);
+
+    const { error: rosterError } = await database.from('plantillas').upsert({
+      jugador_id: legacyPlayer.id,
+      equipo_id: teamId,
+      dorsal: player.dorsal ? String(player.dorsal) : null
+    }, { onConflict: 'jugador_id,equipo_id' });
+    throwOnError(`Plantilla ${player.name}`, rosterError);
+  }
+
+  const playerStatRows = normalized.players.flatMap(player => {
+    const playerId = playerIds.get(player.id);
+    const stat = playerStats.get(player.id);
+    if (!playerId || !stat || !hasNumericStats(stat)) return [];
+    return [{
+      jugador_id: playerId,
+      dorsal: player.dorsal ? String(player.dorsal) : null,
+      puntos: stat.pts ?? 0,
+      valoracion: 0,
+      tiempo_jugado: stat.secondsPlayed ?? 0,
+      asistencias: 0,
+      tapones: 0,
+      faltas_cometidas: stat.fc ?? 0,
+      t1_anotados: stat.ftm ?? 0,
+      t2_anotados: stat.t2m ?? 0,
+      t3_anotados: stat.t3m ?? 0,
+      t1_intentados: stat.fta ?? 0,
+      t2_intentados: stat.t2a ?? 0,
+      t3_intentados: stat.t3a ?? 0
+    }];
+  });
+
+  const shots = normalized.shots.flatMap(shot => {
+    const playerId = shot.playerId ? playerIds.get(shot.playerId) : undefined;
+    const shotNumber = shot.shotType?.match(/[123]/)?.[0];
+    if (!playerId || !shotNumber || shot.made === null || shot.made === undefined
+      || !playerStatRows.some(row => row.jugador_id === playerId)) return [];
+    return [{
+      jugador_id: playerId,
+      tipo_tiro: `${shotNumber}pt`,
+      periodo: shot.period,
+      minuto: shot.minute ?? 0,
+      segundo: shot.second ?? 0,
+      x: shot.x ?? 0,
+      y: shot.y ?? 0,
+      x_norm: 0,
+      y_norm: 0,
+      event_uuid: shot.eventUuid
+    }];
+  });
+
+  const scoreEvolution = normalized.scoreEvolution.map(entry => ({
+    periodo: entry.period,
+    minuto_cuarto: entry.minute ?? 0,
+    minuto_absoluto: Math.max(0, (entry.period - 1) * 10 + (entry.minute ?? 0)),
+    puntos_local: entry.localScore,
+    puntos_visitante: entry.visitorScore,
+    diferencia: entry.localScore - entry.visitorScore
+  }));
+
+  const movementRows = normalized.events.map(event => {
+    const teamDbId = event.teamId ? teamIds.get(event.teamId) : undefined;
+    const playerDbId = event.playerId ? playerIds.get(event.playerId) : undefined;
+    const score = event.localScore === null || event.localScore === undefined
+      || event.visitorScore === null || event.visitorScore === undefined
+      ? ''
+      : `${event.localScore}-${event.visitorScore}`;
+    return {
+      periodo: event.period,
+      minuto: event.minute ?? 0,
+      segundo: event.second ?? 0,
+      tipo_movimiento: String(event.externalEventTypeId ?? event.eventTypeCode ?? 'EVENTO'),
+      descripcion: event.eventTypeCode ?? '',
+      jugador_id: playerDbId ?? null,
+      equipo_id: teamDbId ?? null,
+      marcador: score,
+      event_uuid: event.eventUuid
+    };
+  });
+  const startingRows = normalized.players.flatMap(player => {
+    if (!player.starting) return [];
+    const teamDbId = player.teamId ? teamIds.get(player.teamId) : undefined;
+    const playerDbId = playerIds.get(player.id);
+    if (!teamDbId || !playerDbId) return [];
+    return [{
+      periodo: 1,
+      minuto: 6,
+      segundo: 0,
+      tipo_movimiento: '112',
+      descripcion: 'Entra al camp',
+      jugador_id: playerDbId,
+      equipo_id: teamDbId,
+      marcador: '0-0',
+      event_uuid: `start_${String(matchRow.id_match_extern)}_${playerDbId}`
+    }];
+  });
+
+  log('Sustituyendo el snapshot mediante una transacción...', 'info');
+  const { data, error } = await database.rpc('replace_live_match_snapshot', {
+    p_match: matchRow,
+    p_player_stats: playerStatRows,
+    p_shots: shots,
+    p_score_evolution: scoreEvolution,
+    p_movements: [...startingRows, ...movementRows]
+  });
+  throwOnError('Sustitución transaccional del snapshot', error);
+  const matchId = typeof data === 'string'
+    ? data
+    : typeof data?.matchId === 'string'
+      ? data.matchId
+      : null;
+  if (!matchId) {
+    throw new Error('Sustitución transaccional del snapshot: la RPC no devolvió el ID del partido.');
+  }
+  log('Snapshot sustituido de forma transaccional.', 'success');
+  return matchId;
+};
+
 export const persistFederationMatchToLegacy = async (
   normalized: FederationNormalizedMatch,
   metadata: FederationLegacyMetadata,
   matchDay: number | null,
   sourceUrl: string | undefined,
   database: any,
-  onLog?: (message: string, type?: 'info' | 'success' | 'error' | 'data') => void
+  onLog?: (message: string, type?: 'info' | 'success' | 'error' | 'data') => void,
+  liveMatchId?: string
 ) => {
   const log = (message: string, type: 'info' | 'success' | 'error' | 'data' = 'info') => onLog?.(message, type);
   log('Validando fecha y marcador del encabezado...', 'info');
@@ -123,11 +272,12 @@ export const persistFederationMatchToLegacy = async (
     throw new Error('El partido no contiene los dos equipos necesarios para persistirlo.');
   }
 
-  const sourceMatchId = normalized.match.externalMatchUuid
+  const sourceMatchId = liveMatchId
+    ?? normalized.match.externalMatchUuid
     ?? sourceUrl?.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0]
     ?? `match-${slugFromText(`${normalized.match.localTeamName}-${normalized.match.visitorTeamName}-${normalized.match.date ?? 'unknown-date'}`)}`;
   const legacyMatchId = toLegacyBigintId(sourceMatchId);
-  const match = await upsertOne(database, 'partidos', {
+  const matchRow = {
     id_match_extern: legacyMatchId,
     competicion_id: competitionResult.id,
     equipo_local_id: teamIds.get(localTeam.id),
@@ -136,7 +286,28 @@ export const persistFederationMatchToLegacy = async (
     puntos_local: localScore,
     puntos_visitante: visitorScore,
     jornada: matchDay
-  }, 'id_match_extern', 'Partido');
+  };
+  if (liveMatchId) {
+    const matchId = await persistLiveMatchSnapshot(normalized, matchRow, database, teamIds, log);
+    log(`Importación completa. Clave legacy ${legacyMatchId}; fecha ${matchDate}; marcador ${localScore}-${visitorScore}.`, 'success');
+    return {
+      matchId,
+      sourceMatchId,
+      externalMatchId: legacyMatchId,
+      seasonName: metadata.temporada,
+      categoryName: metadata.categoria,
+      competitionName: metadata.competicion,
+      localTeam: normalized.match.localTeamName,
+      visitorTeam: normalized.match.visitorTeamName,
+      fechaHora: matchDate,
+      jornada: matchDay,
+      puntosLocal: localScore,
+      puntosVisitante: visitorScore,
+      score: `${localScore}-${visitorScore}`
+    };
+  }
+
+  const match = await upsertOne(database, 'partidos', matchRow, 'id_match_extern', 'Partido');
   log(`Partido guardado: ${matchDate}, ${localScore}-${visitorScore}, jornada ${matchDay ?? '-'}.`, 'success');
 
   log('Limpiando estadísticas anteriores de la misma importación...', 'info');

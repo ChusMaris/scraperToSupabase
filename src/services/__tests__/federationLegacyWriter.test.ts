@@ -13,7 +13,7 @@ const __dirname = dirname(__filename);
 const stats = JSON.parse(readFileSync(resolve(__dirname, '../../../stats.json'), 'utf8'));
 const pbp = JSON.parse(readFileSync(resolve(__dirname, '../../../pbp.json'), 'utf8'));
 
-const createRecordingDatabase = () => {
+const createRecordingDatabase = (rpcError: { message: string } | null = null) => {
   const operations: Array<{ table: string; method: string; value?: any }> = [];
   let nextId = 0;
 
@@ -54,7 +54,12 @@ const createRecordingDatabase = () => {
     return query;
   };
 
-  return { database: { from }, operations };
+  const rpc = (name: string, value: any) => {
+    operations.push({ table: name, method: 'rpc', value });
+    return Promise.resolve({ data: rpcError ? null : 'live-match-row-id', error: rpcError });
+  };
+
+  return { database: { from, rpc }, operations };
 };
 
 test('persists the normalized match only through existing legacy tables', async () => {
@@ -71,6 +76,7 @@ test('persists the normalized match only through existing legacy tables', async 
   );
 
   const writtenTables = new Set(operations.map(operation => operation.table));
+  assert.equal(operations.some(operation => operation.method === 'rpc'), false);
   assert.equal(result.sourceMatchId, '95332c8d-eefc-43ed-ac9a-d9af7d4f926d');
   assert.match(result.externalMatchId, /^\d+$/);
   assert.equal(result.externalMatchId, toLegacyBigintId(result.sourceMatchId));
@@ -113,6 +119,83 @@ test('persists the normalized match only through existing legacy tables', async 
     playerWrites[0].value.actor_id,
     toLegacyBigintId(normalized.players[0].externalUuid ?? normalized.players[0].id)
   );
+});
+
+test('uses the direct-match ID as the stable legacy match identity when provided', async () => {
+  const normalized = normalizeFederationMatch(stats, pbp);
+  const { database, operations } = createRecordingDatabase();
+  const result = await persistFederationMatchToLegacy(
+    normalized,
+    { temporada: '2026/27', categoria: normalized.category.name, competicion: normalized.competition.name },
+    7,
+    'https://www.basquetcatala.cat/estadistica/partit/95332c8d-eefc-43ed-ac9a-d9af7d4f926d',
+    database,
+    undefined,
+    '302113'
+  );
+
+  assert.equal(result.sourceMatchId, '302113');
+  assert.equal(result.externalMatchId, '302113');
+  const rpcCall = operations.find(operation => operation.table === 'replace_live_match_snapshot' && operation.method === 'rpc');
+  assert.equal(rpcCall?.value.p_match.id_match_extern, '302113');
+  assert.equal(operations.some(operation => operation.table === 'partidos' && operation.method === 'upsert'), false);
+  assert.equal(operations.some(operation => operation.table === 'partido_movimientos' && operation.method === 'delete'), false);
+});
+
+test('reports live snapshot RPC failures without falling back to non-atomic writes', async () => {
+  const normalized = normalizeFederationMatch(stats, pbp);
+  const { database, operations } = createRecordingDatabase({ message: 'transaction failed' });
+
+  await assert.rejects(
+    persistFederationMatchToLegacy(
+      normalized,
+      { temporada: '2026/27', categoria: normalized.category.name, competicion: normalized.competition.name },
+      7,
+      undefined,
+      database,
+      undefined,
+      '302113'
+    ),
+    /Sustitución transaccional del snapshot: transaction failed/
+  );
+  assert.equal(operations.some(operation => operation.table === 'partidos' && operation.method === 'upsert'), false);
+  assert.equal(operations.some(operation => operation.table === 'partido_marcador_evolucion' && operation.method === 'delete'), false);
+});
+
+test('replaces successive live snapshots using one identity and the newest child rows', async () => {
+  const normalized = normalizeFederationMatch(stats, pbp);
+  const { database, operations } = createRecordingDatabase();
+  const metadata = {
+    temporada: '2026/27',
+    categoria: normalized.category.name,
+    competicion: normalized.competition.name
+  };
+  const first = await persistFederationMatchToLegacy(
+    normalized, metadata, 7, undefined, database, undefined, '302113'
+  );
+  const extraEvent = {
+    ...normalized.events[normalized.events.length - 1],
+    eventUuid: '9a64cc1c-3241-4e1c-ab2e-ace6dfd5b44b',
+    localScore: (normalized.match.finalScoreLocal ?? 0) + 1
+  };
+  const laterSnapshot = {
+    ...normalized,
+    match: { ...normalized.match, finalScoreLocal: extraEvent.localScore },
+    events: [...normalized.events, extraEvent]
+  };
+  const second = await persistFederationMatchToLegacy(
+    laterSnapshot, metadata, 7, undefined, database, undefined, '302113'
+  );
+  const rpcCalls = operations.filter(operation => operation.table === 'replace_live_match_snapshot');
+
+  assert.equal(first.sourceMatchId, second.sourceMatchId);
+  assert.equal(first.externalMatchId, second.externalMatchId);
+  assert.equal(rpcCalls.length, 2);
+  assert.equal(rpcCalls[0].value.p_match.id_match_extern, rpcCalls[1].value.p_match.id_match_extern);
+  assert.equal(rpcCalls[1].value.p_match.puntos_local, extraEvent.localScore);
+  assert.ok(rpcCalls[1].value.p_movements.some((movement: { event_uuid: string }) =>
+    movement.event_uuid === extraEvent.eventUuid
+  ));
 });
 
 test('rejects missing match date or score before writing any database row', async () => {

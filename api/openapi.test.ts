@@ -19,3 +19,16 @@ test('uses the same unauthenticated access model as the existing federation impo
   assert.equal(operation.security, undefined);
   assert.equal(components.securitySchemes, undefined);
 });
+
+test('documents the optional stable identity for repeated live snapshots', () => {
+  const operation = openApiDocument.paths['/api/federation/import'].post as {
+    requestBody: {
+      content: {
+        'application/json': {
+          schema: { properties: Record<string, unknown> };
+        };
+      };
+    };
+  };
+  assert.ok(operation.requestBody.content['application/json'].schema.properties.liveMatchId);
+});

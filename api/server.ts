@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { normalizeFederationMatch } from '../src/services/federationNormalizer.js';
 import { persistFederationMatchToLegacy } from '../src/services/federationLegacyWriter.js';
 import { getComplementaryStatsOptions, importComplementaryStats } from './complementaryStats.js';
+import { getLiveMatchId, validateFederationImportBody } from './federationImport.js';
 import swaggerUi from 'swagger-ui-express';
 import { openApiDocument } from './openapi.js';
 
@@ -33,21 +34,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
-
-const validateBundle = (body: any) => {
-  if (!body || typeof body !== 'object') {
-    return 'Request body is not an object';
-  }
-
-  const hasStats = !!body.statsPayload || !!body.mainJson;
-  const hasPbp = !!body.pbpPayload || !!body.movesJson;
-
-  if (!hasStats || !hasPbp) {
-    return 'The request must include both statsPayload and pbpPayload';
-  }
-
-  return null;
-};
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, status: 'healthy' });
@@ -148,7 +134,7 @@ app.post('/api/complementary-stats/import', async (req, res) => {
 });
 
 app.post('/api/federation/import', async (req, res) => {
-  const validationError = validateBundle(req.body);
+  const validationError = validateFederationImportBody(req.body);
   if (validationError) {
     res.status(400).json({ ok: false, error: validationError });
     return;
@@ -176,6 +162,7 @@ app.post('/api/federation/import', async (req, res) => {
   }
 
   try {
+    const liveMatchId = getLiveMatchId(req.body);
     writeEvent({ type: 'log', level: 'info', message: 'Petición recibida; preparando importación.' });
     const statsPayload = req.body.statsPayload ?? req.body.mainJson;
     const pbpPayload = req.body.pbpPayload ?? req.body.movesJson;
@@ -208,7 +195,8 @@ app.post('/api/federation/import', async (req, res) => {
       matchDay,
       req.body.sourceUrl,
       supabase,
-      (message, level = 'info') => writeEvent({ type: 'log', level, message })
+      (message, level = 'info') => writeEvent({ type: 'log', level, message }),
+      liveMatchId
     );
 
     if (wantsEventStream) {

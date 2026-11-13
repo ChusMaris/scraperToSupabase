@@ -43,10 +43,39 @@ export const openApiDocument = {
                 type: 'object',
                 required: ['statsPayload', 'pbpPayload'],
                 properties: {
-                  statsPayload: { type: 'object', description: 'Payload de estadísticas del partido' },
-                  pbpPayload: { type: 'object', description: 'Payload de play-by-play' },
+                  statsPayload: {
+                    type: 'object',
+                    required: ['header', 'boxscore'],
+                    properties: {
+                      header: {
+                        type: 'object',
+                        required: ['date', 'localTeam', 'visitorTeam', 'score'],
+                        properties: {
+                          date: { type: 'string', format: 'date-time' },
+                          localTeam: { type: 'object', required: ['name'], properties: { uuid: { type: 'string' }, name: { type: 'string' }, shortName: { type: 'string' } } },
+                          visitorTeam: { type: 'object', required: ['name'], properties: { uuid: { type: 'string' }, name: { type: 'string' }, shortName: { type: 'string' } } },
+                          score: { type: 'object', required: ['local', 'visitor'], properties: { local: { type: 'number' }, visitor: { type: 'number' } } }
+                        }
+                      },
+                      boxscore: { type: 'array', items: { type: 'object' } },
+                      shotChart: { type: 'object' },
+                      scoreEvolution: { type: 'array', items: { type: 'object' } }
+                    }
+                  },
+                  pbpPayload: {
+                    type: 'object',
+                    required: ['playByPlay'],
+                    properties: { playByPlay: { type: 'array', items: { type: 'object' } } }
+                  },
                   metadata: { type: 'object', additionalProperties: true },
-                  sourceUrl: { type: 'string', format: 'uri' }
+                  sourceUrl: { type: 'string', format: 'uri' },
+                  liveMatchId: {
+                    oneOf: [
+                      { type: 'integer', minimum: 1, maximum: 9007199254740991 },
+                      { type: 'string', pattern: '^[1-9][0-9]*$' }
+                    ],
+                    description: 'Identificador numérico de /directe/<id>. Repetir este ID sustituye atómicamente el snapshot anterior.'
+                  }
                 }
               }
             }
