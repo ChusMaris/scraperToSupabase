@@ -242,6 +242,37 @@ test('namespaces movement UUIDs by live match to avoid collisions between matche
   assert.match(secondEventId, /^live_302114_event_/);
 });
 
+test('namespaces shot UUIDs by live match and deduplicates repeated shot IDs', async () => {
+  const normalized = normalizeFederationMatch(stats, pbp);
+  const shot = normalized.shots[0];
+  const duplicatedSnapshot = {
+    ...normalized,
+    shots: [...normalized.shots, { ...shot, x: (shot.x ?? 0) + 1 }]
+  };
+  const metadata = {
+    temporada: '2026/27',
+    categoria: normalized.category.name,
+    competicion: normalized.competition.name
+  };
+  const firstDb = createRecordingDatabase();
+  const secondDb = createRecordingDatabase();
+
+  await persistFederationMatchToLegacy(duplicatedSnapshot, metadata, 7, undefined, firstDb.database, undefined, '302113');
+  await persistFederationMatchToLegacy(normalized, metadata, 7, undefined, secondDb.database, undefined, '302114');
+
+  const firstShots = firstDb.operations.find(operation => operation.table === 'replace_live_match_snapshot')
+    ?.value.p_shots as Array<{ event_uuid: string; x: number }>;
+  const secondShots = secondDb.operations.find(operation => operation.table === 'replace_live_match_snapshot')
+    ?.value.p_shots as Array<{ event_uuid: string }>;
+  assert.equal(new Set(firstShots.map(row => row.event_uuid)).size, firstShots.length);
+  assert.ok(firstShots.every(row => row.event_uuid.startsWith('live_302113_shot_')));
+  assert.ok(secondShots.every(row => row.event_uuid.startsWith('live_302114_shot_')));
+  assert.equal(
+    firstShots.find(row => row.event_uuid === `live_302113_shot_${shot.eventUuid}`)?.x,
+    (shot.x ?? 0) + 1
+  );
+});
+
 test('replaces successive live snapshots using one identity and the newest child rows', async () => {
   const normalized = normalizeFederationMatch(stats, pbp);
   const { database, operations } = createRecordingDatabase();

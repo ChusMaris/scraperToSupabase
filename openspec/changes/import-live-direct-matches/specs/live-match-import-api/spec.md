@@ -31,7 +31,7 @@ For repeated snapshots with the same `liveMatchId`, the API SHALL update the exi
 - **THEN** the API returns a non-success response describing the missing or invalid data and does not report a successful import
 
 ### Requirement: Resolve play-by-play actors without fabricating player data
-For live snapshots, the API SHALL link an event to a player using the PBP actor UUID, name, dorsal, and team UUID when those fields are present. It SHALL preserve events without player identity as match movements with no player association, and SHALL retain the original event type ID and code. It SHALL use a movement identifier distinct from the actor UUID, namespace the persisted movement UUID by stable match identity, and ensure each movement UUID appears at most once in a snapshot. It SHALL NOT create placeholder players or zero-valued player statistics when the boxscore contains no named player or numeric statistics.
+For live snapshots, the API SHALL link an event to a player using the PBP actor UUID, name, dorsal, and team UUID when those fields are present. It SHALL preserve events without player identity as match movements with no player association, and SHALL retain the original event type ID and code. It SHALL use movement and shot identifiers distinct from the actor UUID, namespace persisted movement and shot UUIDs by stable match identity, and ensure each such UUID appears at most once in a snapshot. It SHALL NOT create placeholder players or zero-valued player statistics when the boxscore contains no named player or numeric statistics.
 
 #### Scenario: Resolve a PBP actor missing from the boxscore
 - **WHEN** an event contains a player UUID, actor name, dorsal, and team UUID but the boxscore player has only a UUID

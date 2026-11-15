@@ -116,12 +116,14 @@ const persistLiveMatchSnapshot = async (
     }];
   });
 
-  const shots = normalized.shots.flatMap(shot => {
+  const shotsByUuid = new Map<string, Record<string, unknown>>();
+  for (const shot of normalized.shots) {
     const playerId = shot.playerId ? playerIds.get(shot.playerId) : undefined;
     const shotNumber = shot.shotType?.match(/[123]/)?.[0];
     if (!playerId || !shotNumber || shot.made === null || shot.made === undefined
-      || !playerStatRows.some(row => row.jugador_id === playerId)) return [];
-    return [{
+      || !playerStatRows.some(row => row.jugador_id === playerId)) continue;
+    const eventUuid = `live_${String(matchRow.id_match_extern)}_shot_${shot.eventUuid}`;
+    shotsByUuid.set(eventUuid, {
       jugador_id: playerId,
       tipo_tiro: `${shotNumber}pt`,
       periodo: shot.period,
@@ -131,9 +133,16 @@ const persistLiveMatchSnapshot = async (
       y: shot.y ?? 0,
       x_norm: 0,
       y_norm: 0,
-      event_uuid: shot.eventUuid
-    }];
-  });
+      event_uuid: eventUuid
+    });
+  }
+  const shots = [...shotsByUuid.values()];
+  if (shots.length < normalized.shots.length) {
+    log(
+      `Se descartaron ${normalized.shots.length - shots.length} tiros no persistibles o duplicados por event_uuid.`,
+      'info'
+    );
+  }
 
   const scoreEvolution = normalized.scoreEvolution.map(entry => ({
     periodo: entry.period,

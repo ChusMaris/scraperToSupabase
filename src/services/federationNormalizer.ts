@@ -493,8 +493,18 @@ export const normalizeFederationMatch = (
   const normalizedShots: FederationShotRecord[] = [];
   const localShots = Array.isArray(shotChart.local) ? shotChart.local : [];
   const visitorShots = Array.isArray(shotChart.visitor) ? shotChart.visitor : [];
-  for (const shot of [...localShots, ...visitorShots]) {
-    const eventUuid = toUuid(shot.eventUuid) ?? toUuid(shot.uuid) ?? `${slugFromText(shot.actorName ?? 'shot')}-${shot.period ?? 0}-${shot.x ?? 0}-${shot.y ?? 0}`;
+  for (const [index, shot] of [...localShots, ...visitorShots].entries()) {
+    const eventUuid = textValue(shot.eventUuid)
+      ?? textValue(shot.eventId)
+      ?? textValue(shot.id)
+      ?? `shot-${index}-${slugFromText([
+        shot.teamUuid ?? 'team',
+        shot.period ?? 0,
+        shot.minute ?? 0,
+        shot.second ?? 0,
+        shot.x ?? '',
+        shot.y ?? ''
+      ].join('-'))}`;
     const teamId = shot.teamUuid ? slugFromText(`${shot.teamUuid}`) : null;
     const playerId = shot.uuid && textValue(shot.actorName)
       ? playerIdFrom(shot.uuid, shot.actorName, null)

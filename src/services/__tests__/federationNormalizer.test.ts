@@ -73,3 +73,22 @@ test('does not use a player UUID as the event UUID when the event UUID is missin
   assert.notEqual(normalized.events[0].eventUuid, playerUuid);
   assert.equal(normalized.events[0].playerId, normalized.events[1].playerId);
 });
+
+test('does not use a player UUID as the shot UUID when the shot identifier is missing', () => {
+  const playerUuid = '2fc6dcd9-a5ce-4d4d-a066-3655c936345b';
+  const normalized = normalizeFederationMatch({
+    ...stats,
+    shotChart: {
+      local: [
+        { uuid: playerUuid, actorName: 'YAGO WERLIK MIRAVET', period: 1, x: 10, y: 20, made: true, type: '2pt' },
+        { uuid: playerUuid, actorName: 'YAGO WERLIK MIRAVET', period: 1, x: 30, y: 40, made: true, type: '2pt' }
+      ],
+      visitor: []
+    }
+  }, { playByPlay: [] });
+
+  assert.equal(normalized.shots.length, 2);
+  assert.notEqual(normalized.shots[0].eventUuid, normalized.shots[1].eventUuid);
+  assert.ok(normalized.shots.every(shot => shot.eventUuid !== playerUuid));
+  assert.equal(normalized.shots[0].playerId, normalized.shots[1].playerId);
+});
