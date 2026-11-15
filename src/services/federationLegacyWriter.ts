@@ -57,6 +57,7 @@ const persistLiveMatchSnapshot = async (
   normalized: FederationNormalizedMatch,
   matchRow: Record<string, unknown>,
   database: any,
+  snapshotDatabase: any,
   teamIds: Map<string, string>,
   log: (message: string, type?: 'info' | 'success' | 'error' | 'data') => void
 ): Promise<string> => {
@@ -181,7 +182,7 @@ const persistLiveMatchSnapshot = async (
   });
 
   log('Sustituyendo el snapshot mediante una transacción...', 'info');
-  const { data, error } = await database.rpc('replace_live_match_snapshot', {
+  const { data, error } = await snapshotDatabase.rpc('replace_live_match_snapshot', {
     p_match: matchRow,
     p_player_stats: playerStatRows,
     p_shots: shots,
@@ -208,7 +209,8 @@ export const persistFederationMatchToLegacy = async (
   sourceUrl: string | undefined,
   database: any,
   onLog?: (message: string, type?: 'info' | 'success' | 'error' | 'data') => void,
-  liveMatchId?: string
+  liveMatchId?: string,
+  snapshotDatabase: any = database
 ) => {
   const log = (message: string, type: 'info' | 'success' | 'error' | 'data' = 'info') => onLog?.(message, type);
   log('Validando fecha y marcador del encabezado...', 'info');
@@ -288,7 +290,7 @@ export const persistFederationMatchToLegacy = async (
     jornada: matchDay
   };
   if (liveMatchId) {
-    const matchId = await persistLiveMatchSnapshot(normalized, matchRow, database, teamIds, log);
+    const matchId = await persistLiveMatchSnapshot(normalized, matchRow, database, snapshotDatabase, teamIds, log);
     log(`Importación completa. Clave legacy ${legacyMatchId}; fecha ${matchDate}; marcador ${localScore}-${visitorScore}.`, 'success');
     return {
       matchId,

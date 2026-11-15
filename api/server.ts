@@ -28,12 +28,18 @@ app.use(express.json({ limit: '25mb' }));
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('[api] Missing Supabase env values. Import endpoint will fail until they are configured.');
 }
 
 const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
+const supabaseServiceRole = supabaseUrl && supabaseServiceRoleKey
+  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+  : null;
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, status: 'healthy' });
@@ -145,6 +151,15 @@ app.post('/api/federation/import', async (req, res) => {
     return;
   }
 
+  const liveMatchId = getLiveMatchId(req.body);
+  if (liveMatchId && !supabaseServiceRole) {
+    res.status(503).json({
+      ok: false,
+      error: 'Live imports require SUPABASE_SERVICE_ROLE_KEY to be configured on the API server'
+    });
+    return;
+  }
+
   const wantsEventStream = req.get('accept')?.includes('text/event-stream') ?? false;
   const writeEvent = (event: Record<string, unknown>) => {
     if (wantsEventStream && !res.writableEnded) {
@@ -162,7 +177,6 @@ app.post('/api/federation/import', async (req, res) => {
   }
 
   try {
-    const liveMatchId = getLiveMatchId(req.body);
     writeEvent({ type: 'log', level: 'info', message: 'Petición recibida; preparando importación.' });
     const statsPayload = req.body.statsPayload ?? req.body.mainJson;
     const pbpPayload = req.body.pbpPayload ?? req.body.movesJson;
@@ -196,7 +210,8 @@ app.post('/api/federation/import', async (req, res) => {
       req.body.sourceUrl,
       supabase,
       (message, level = 'info') => writeEvent({ type: 'log', level, message }),
-      liveMatchId
+      liveMatchId,
+      supabaseServiceRole ?? undefined
     );
 
     if (wantsEventStream) {

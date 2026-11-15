@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION public.replace_live_match_snapshot(
 RETURNS text
 LANGUAGE plpgsql
 SECURITY INVOKER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_match_id public.partidos.id%TYPE;
@@ -187,3 +187,7 @@ BEGIN
   RETURN v_match_id::text;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.replace_live_match_snapshot(jsonb, jsonb, jsonb, jsonb, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.replace_live_match_snapshot(jsonb, jsonb, jsonb, jsonb, jsonb)
+  TO service_role;

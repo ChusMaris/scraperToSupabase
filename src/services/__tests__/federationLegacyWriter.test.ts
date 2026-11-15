@@ -142,6 +142,30 @@ test('uses the direct-match ID as the stable legacy match identity when provided
   assert.equal(operations.some(operation => operation.table === 'partido_movimientos' && operation.method === 'delete'), false);
 });
 
+test('uses a separate service-role database client for the live snapshot RPC', async () => {
+  const normalized = normalizeFederationMatch(stats, pbp);
+  const { database: anonDatabase, operations: anonOperations } = createRecordingDatabase();
+  const { database: serviceDatabase, operations: serviceOperations } = createRecordingDatabase();
+
+  await persistFederationMatchToLegacy(
+    normalized,
+    { temporada: '2026/27', categoria: normalized.category.name, competicion: normalized.competition.name },
+    7,
+    undefined,
+    anonDatabase,
+    undefined,
+    '302113',
+    serviceDatabase
+  );
+
+  assert.equal(anonOperations.some(operation => operation.method === 'rpc'), false);
+  assert.equal(
+    serviceOperations.filter(operation => operation.table === 'replace_live_match_snapshot' && operation.method === 'rpc').length,
+    1
+  );
+  assert.equal(anonOperations.some(operation => operation.table === 'jugadores' && operation.method === 'upsert'), true);
+});
+
 test('reports live snapshot RPC failures without falling back to non-atomic writes', async () => {
   const normalized = normalizeFederationMatch(stats, pbp);
   const { database, operations } = createRecordingDatabase({ message: 'transaction failed' });

@@ -18,7 +18,7 @@ En cada importación, el escritor elimina los movimientos, evolución y estadís
 
 **Non-Goals:**
 - Añadir un endpoint alternativo o cambiar la interfaz de la aplicación Stats.
-- Cambiar la autorización existente de la API.
+- Añadir autenticación de usuario a los endpoints públicos existentes.
 - Implementar el popup, el temporizador o la captura del navegador; corresponden al cambio complementario de matchOnline.
 
 ## Decisions
@@ -31,21 +31,21 @@ En cada importación, el escritor elimina los movimientos, evolución y estadís
 
 4. **No fabricar estadísticas de jugadores ausentes.** No crear jugadores con nombre `Unknown` para elementos del roster que solo contienen UUID. En los snapshots en directo, persistir estadísticas individuales solo cuando el boxscore proporciona valores numéricos; los jugadores identificados a través del PBP siguen vinculados a sus movimientos aunque su boxscore todavía no tenga estadísticas.
 
-5. **Hacer atómica la actualización de datos del partido solo para imports live.** Añadir una RPC SQL con privilegios del invocador que, en una transacción, haga upsert de la fila `partidos` y sustituya sus estadísticas, tiros, movimientos y evolución. Preparar catálogos, equipos, jugadores y plantillas con las operaciones existentes. Imports sin `liveMatchId` mantienen intacto el camino actual. La extensión solo se desplegará tras aplicar la migración.
+5. **Hacer atómica la actualización de datos del partido solo para imports live.** Añadir una RPC SQL `SECURITY INVOKER` con `search_path` fijo y permiso de ejecución concedido solo a `service_role`. La API usa una clave service-role exclusivamente para esta RPC; mantiene el cliente anon para preparar catálogos, equipos, jugadores y plantillas. Así se evitan políticas RLS incompletas sin abrir inserciones generales ni exponer la RPC a `anon`. Imports sin `liveMatchId` mantienen intacto el camino actual.
 
 6. **Validar antes de escribir.** Rechazar ID no numérico, fecha/marcador/equipos inválidos y estructuras incompletas de stats/PBP antes de tocar la base de datos. No convertir campos ausentes en datos ficticios.
 
 ## Risks / Trade-offs
 
-- [La RPC requiere desplegar una migración en Supabase antes de habilitar importación móvil] → La función es aditiva, usa privilegios del invocador y la API solo la llama cuando se proporciona `liveMatchId`; mantener sin cambios los clientes existentes y documentar el orden de despliegue.
+- [La RPC necesita permisos de servicio para pasar RLS y su interfaz debe limitarse] → Fijar `search_path`, usar nombres de tabla cualificados, revocar ejecución a `PUBLIC` y conceder solo a `service_role`; el cliente service-role permanece solo en el servidor y se usa exclusivamente para la RPC. Aplicar la migración correctiva y configurar el secreto en el servidor antes de reintentar.
 - [Algunos IDs/códigos de evento no tienen semántica verificada] → Guardar los valores originales, enlazar jugadores solo con identificadores observados y no derivar puntos/faltas de códigos no documentados.
 - [Cada importación reemplaza un conjunto completo de filas, por lo que 5 segundos puede generar carga] → Medir la duración con un payload completo; la extensión evita enviar snapshots sin cambios y no solapa escrituras.
 - [La forma real de futuras respuestas puede cambiar] → Validar los campos requeridos antes de persistir y mostrar errores explícitos.
 
 ## Migration Plan
 
-1. Aplicar la nueva migración SQL/RPC a Supabase; las rutas existentes no la invocan.
-2. Desplegar la API con validación y persistencia atómica del campo opcional `liveMatchId`.
+1. Aplicar `20261109_replace_live_match_snapshot.sql` si aún no está aplicada y luego `20261114_fix_live_match_snapshot_rls.sql` a Supabase.
+2. Configurar `SUPABASE_SERVICE_ROLE_KEY` como secreto del servidor y desplegar la API; las rutas sin `liveMatchId` siguen usando el cliente anon.
 3. Distribuir matchOnline para que capture `/matches/stats` y `/matches/pbp` y envíe snapshots completos con el ID directo.
 4. Si se revierte, detener la importación móvil; los clientes anteriores continúan usando su ruta actual y los snapshots ya guardados se conservan.
 
