@@ -208,7 +208,38 @@ test('deduplicates movement rows by event UUID before calling the live snapshot 
   const rpcCall = operations.find(operation => operation.table === 'replace_live_match_snapshot');
   const movements = rpcCall?.value.p_movements as Array<{ event_uuid: string; marcador: string }>;
   assert.equal(new Set(movements.map(movement => movement.event_uuid)).size, movements.length);
-  assert.equal(movements.find(movement => movement.event_uuid === event.eventUuid)?.marcador, '99-0');
+  assert.equal(
+    movements.find(movement => movement.event_uuid === `live_302113_event_${event.eventUuid}`)?.marcador,
+    '99-0'
+  );
+  assert.ok(movements.every(movement => movement.event_uuid.startsWith('live_302113_')));
+});
+
+test('namespaces movement UUIDs by live match to avoid collisions between matches', async () => {
+  const normalized = normalizeFederationMatch(stats, pbp);
+  const metadata = {
+    temporada: '2026/27',
+    categoria: normalized.category.name,
+    competicion: normalized.competition.name
+  };
+  const firstDb = createRecordingDatabase();
+  const secondDb = createRecordingDatabase();
+
+  await persistFederationMatchToLegacy(normalized, metadata, 7, undefined, firstDb.database, undefined, '302113');
+  await persistFederationMatchToLegacy(normalized, metadata, 7, undefined, secondDb.database, undefined, '302114');
+
+  const firstRpc = firstDb.operations.find(operation => operation.table === 'replace_live_match_snapshot');
+  const secondRpc = secondDb.operations.find(operation => operation.table === 'replace_live_match_snapshot');
+  const firstEventId = (firstRpc?.value.p_movements as Array<{ event_uuid: string }>)
+    .find(movement => movement.event_uuid.endsWith(normalized.events[0].eventUuid))?.event_uuid;
+  const secondEventId = (secondRpc?.value.p_movements as Array<{ event_uuid: string }>)
+    .find(movement => movement.event_uuid.endsWith(normalized.events[0].eventUuid))?.event_uuid;
+
+  assert.ok(firstEventId);
+  assert.ok(secondEventId);
+  assert.notEqual(firstEventId, secondEventId);
+  assert.match(firstEventId, /^live_302113_event_/);
+  assert.match(secondEventId, /^live_302114_event_/);
 });
 
 test('replaces successive live snapshots using one identity and the newest child rows', async () => {
@@ -241,9 +272,16 @@ test('replaces successive live snapshots using one identity and the newest child
   assert.equal(first.externalMatchId, second.externalMatchId);
   assert.equal(rpcCalls.length, 2);
   assert.equal(rpcCalls[0].value.p_match.id_match_extern, rpcCalls[1].value.p_match.id_match_extern);
+  const firstMovementIds = (rpcCalls[0].value.p_movements as Array<{ event_uuid: string }>)
+    .map(movement => movement.event_uuid)
+    .filter(id => id.startsWith('live_302113_event_'));
+  const secondMovementIds = (rpcCalls[1].value.p_movements as Array<{ event_uuid: string }>)
+    .map(movement => movement.event_uuid)
+    .filter(id => id.startsWith('live_302113_event_'));
+  assert.ok(firstMovementIds.every(id => secondMovementIds.includes(id)));
   assert.equal(rpcCalls[1].value.p_match.puntos_local, extraEvent.localScore);
   assert.ok(rpcCalls[1].value.p_movements.some((movement: { event_uuid: string }) =>
-    movement.event_uuid === extraEvent.eventUuid
+    movement.event_uuid === `live_302113_event_${extraEvent.eventUuid}`
   ));
 });
 

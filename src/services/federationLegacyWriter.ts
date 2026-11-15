@@ -160,7 +160,7 @@ const persistLiveMatchSnapshot = async (
       jugador_id: playerDbId ?? null,
       equipo_id: teamDbId ?? null,
       marcador: score,
-      event_uuid: event.eventUuid
+      event_uuid: `live_${String(matchRow.id_match_extern)}_event_${event.eventUuid}`
     };
   });
   const startingRows = normalized.players.flatMap(player => {
@@ -177,7 +177,7 @@ const persistLiveMatchSnapshot = async (
       jugador_id: playerDbId,
       equipo_id: teamDbId,
       marcador: '0-0',
-      event_uuid: `start_${String(matchRow.id_match_extern)}_${playerDbId}`
+      event_uuid: `live_${String(matchRow.id_match_extern)}_starting_${playerDbId}`
     }];
   });
   const movementRowsByUuid = new Map(

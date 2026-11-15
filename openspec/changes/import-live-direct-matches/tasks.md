@@ -14,7 +14,7 @@
 - [x] 3.2 Add tests for a later snapshot with new movements, invalid IDs, incomplete payloads, and compatibility with requests without `liveMatchId`.
 - [x] 3.3 Add an additive Supabase RPC migration that atomically upserts a live match and replaces its match-specific rows; keep requests without `liveMatchId` on the existing write path.
 - [ ] 3.4 Verify against Supabase that a failed RPC replacement leaves the prior snapshot intact (legacy requests are unit-tested not to invoke the RPC).
-- [x] 3.5 Keep movement UUIDs distinct from player UUIDs and deduplicate repeated movement IDs before calling the snapshot RPC.
+- [x] 3.5 Keep movement UUIDs distinct from player UUIDs, namespace them by live match, and deduplicate repeated movement IDs before calling the snapshot RPC.
 
 ## 4. Document and validate the API contract
 
