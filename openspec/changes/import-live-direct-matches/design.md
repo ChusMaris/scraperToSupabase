@@ -44,7 +44,7 @@ En cada importación, el escritor elimina los movimientos, evolución y estadís
 
 ## Migration Plan
 
-1. Aplicar `20261109_replace_live_match_snapshot.sql` si aún no está aplicada y luego `20261114_fix_live_match_snapshot_rls.sql` a Supabase.
+1. Aplicar `20261109_replace_live_match_snapshot.sql` si aún no está aplicada, y después `20261114_fix_live_match_snapshot_rls.sql` y `20261115_restrict_live_match_snapshot_rpc.sql` a Supabase.
 2. Configurar `SUPABASE_SERVICE_ROLE_KEY` como secreto del servidor y desplegar la API; las rutas sin `liveMatchId` siguen usando el cliente anon.
 3. Distribuir matchOnline para que capture `/matches/stats` y `/matches/pbp` y envíe snapshots completos con el ID directo.
 4. Si se revierte, detener la importación móvil; los clientes anteriores continúan usando su ruta actual y los snapshots ya guardados se conservan.

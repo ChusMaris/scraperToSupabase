@@ -55,7 +55,7 @@ This reads `temporadas`, `categorias`, `competiciones`, and `partidos` from the 
 
 Federation imports are normalized and persisted to the existing legacy tables. Imports from a live `/directe/<id>` page include `liveMatchId`; that optional field selects the stable match identity and the atomic snapshot-replacement RPC.
 
-Apply `supabase/migrations/20261109_replace_live_match_snapshot.sql` and `supabase/migrations/20261114_fix_live_match_snapshot_rls.sql` before enabling API clients that send `liveMatchId`. Configure `SUPABASE_SERVICE_ROLE_KEY` on the API server: only the `service_role` can execute the atomic snapshot RPC, while requests without `liveMatchId` continue to use the existing persistence path.
+Apply `supabase/migrations/20261109_replace_live_match_snapshot.sql`, `supabase/migrations/20261114_fix_live_match_snapshot_rls.sql`, and `supabase/migrations/20261115_restrict_live_match_snapshot_rpc.sql` before enabling API clients that send `liveMatchId`. Configure `SUPABASE_SERVICE_ROLE_KEY` on the API server: only the `service_role` can execute the atomic snapshot RPC, while requests without `liveMatchId` continue to use the existing persistence path.
 
 ```http
 POST /api/federation/import
