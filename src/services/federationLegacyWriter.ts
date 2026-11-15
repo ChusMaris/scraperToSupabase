@@ -180,6 +180,16 @@ const persistLiveMatchSnapshot = async (
       event_uuid: `start_${String(matchRow.id_match_extern)}_${playerDbId}`
     }];
   });
+  const movementRowsByUuid = new Map(
+    [...startingRows, ...movementRows].map(row => [row.event_uuid, row] as const)
+  );
+  const uniqueMovementRows = [...movementRowsByUuid.values()];
+  if (uniqueMovementRows.length < startingRows.length + movementRows.length) {
+    log(
+      `Se descartaron ${startingRows.length + movementRows.length - uniqueMovementRows.length} movimientos duplicados por event_uuid.`,
+      'info'
+    );
+  }
 
   log('Sustituyendo el snapshot mediante una transacción...', 'info');
   const { data, error } = await snapshotDatabase.rpc('replace_live_match_snapshot', {
@@ -187,7 +197,7 @@ const persistLiveMatchSnapshot = async (
     p_player_stats: playerStatRows,
     p_shots: shots,
     p_score_evolution: scoreEvolution,
-    p_movements: [...startingRows, ...movementRows]
+    p_movements: uniqueMovementRows
   });
   throwOnError('Sustitución transaccional del snapshot', error);
   const matchId = typeof data === 'string'

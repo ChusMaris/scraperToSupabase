@@ -456,8 +456,18 @@ export const normalizeFederationMatch = (
     }))
     : derivedScoreEvolution;
 
-  const normalizedEvents: FederationEventRecord[] = (playByPlay ?? []).map((event: any) => {
-    const eventUuid = toUuid(event.eventUuid) ?? toUuid(event.uuid) ?? `${slugFromText(event.actorName ?? 'event')}-${event.period ?? 0}-${event.minute ?? 0}-${event.second ?? 0}`;
+  const normalizedEvents: FederationEventRecord[] = (playByPlay ?? []).map((event: any, index: number) => {
+    const eventUuid = textValue(event.eventUuid)
+      ?? textValue(event.eventId)
+      ?? textValue(event.id)
+      ?? `event-${index}-${slugFromText([
+        event.eventTypeId ?? event.eventTypeCode ?? 'unknown',
+        event.period ?? 0,
+        event.minute ?? 0,
+        event.second ?? 0,
+        event.localScore ?? '',
+        event.visitorScore ?? ''
+      ].join('-'))}`;
     const teamId = event.teamUuid ? slugFromText(`${event.teamUuid}`) : null;
     const playerId = textValue(event.actorName)
       ? playerIdFrom(event.uuid, event.actorName, event.dorsal)

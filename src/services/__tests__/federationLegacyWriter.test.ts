@@ -186,6 +186,31 @@ test('reports live snapshot RPC failures without falling back to non-atomic writ
   assert.equal(operations.some(operation => operation.table === 'partido_marcador_evolucion' && operation.method === 'delete'), false);
 });
 
+test('deduplicates movement rows by event UUID before calling the live snapshot RPC', async () => {
+  const normalized = normalizeFederationMatch(stats, pbp);
+  const event = normalized.events[0];
+  const duplicatedSnapshot = {
+    ...normalized,
+    events: [...normalized.events, { ...event, localScore: 99 }]
+  };
+  const { database, operations } = createRecordingDatabase();
+
+  await persistFederationMatchToLegacy(
+    duplicatedSnapshot,
+    { temporada: '2026/27', categoria: normalized.category.name, competicion: normalized.competition.name },
+    7,
+    undefined,
+    database,
+    undefined,
+    '302113'
+  );
+
+  const rpcCall = operations.find(operation => operation.table === 'replace_live_match_snapshot');
+  const movements = rpcCall?.value.p_movements as Array<{ event_uuid: string; marcador: string }>;
+  assert.equal(new Set(movements.map(movement => movement.event_uuid)).size, movements.length);
+  assert.equal(movements.find(movement => movement.event_uuid === event.eventUuid)?.marcador, '99-0');
+});
+
 test('replaces successive live snapshots using one identity and the newest child rows', async () => {
   const normalized = normalizeFederationMatch(stats, pbp);
   const { database, operations } = createRecordingDatabase();

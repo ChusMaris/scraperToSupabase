@@ -36,3 +36,40 @@ test('normalizeFederationMatch extracts score evolution and play by play events'
   assert.equal(result.scoreEvolution[0].visitorScore, 2);
   assert.ok(result.scoreEvolution.some(entry => entry.localScore === 15 && entry.visitorScore === 13));
 });
+
+test('does not use a player UUID as the event UUID when the event UUID is missing', () => {
+  const playerUuid = '2fc6dcd9-a5ce-4d4d-a066-3655c936345b';
+  const normalized = normalizeFederationMatch(stats, {
+    playByPlay: [
+      {
+        eventTypeId: 524,
+        eventTypeCode: 'D2',
+        period: 1,
+        minute: 9,
+        second: 43,
+        localScore: 0,
+        visitorScore: 2,
+        uuid: playerUuid,
+        actorName: 'YAGO WERLIK MIRAVET',
+        dorsal: '17'
+      },
+      {
+        eventTypeId: 531,
+        eventTypeCode: 'P',
+        period: 1,
+        minute: 8,
+        second: 32,
+        localScore: 0,
+        visitorScore: 2,
+        uuid: playerUuid,
+        actorName: 'YAGO WERLIK MIRAVET',
+        dorsal: '17'
+      }
+    ]
+  });
+
+  assert.equal(normalized.events.length, 2);
+  assert.notEqual(normalized.events[0].eventUuid, normalized.events[1].eventUuid);
+  assert.notEqual(normalized.events[0].eventUuid, playerUuid);
+  assert.equal(normalized.events[0].playerId, normalized.events[1].playerId);
+});

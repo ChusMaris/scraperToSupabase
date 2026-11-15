@@ -31,7 +31,7 @@ For repeated snapshots with the same `liveMatchId`, the API SHALL update the exi
 - **THEN** the API returns a non-success response describing the missing or invalid data and does not report a successful import
 
 ### Requirement: Resolve play-by-play actors without fabricating player data
-For live snapshots, the API SHALL link an event to a player using the PBP actor UUID, name, dorsal, and team UUID when those fields are present. It SHALL preserve events without player identity as match movements with no player association, and SHALL retain the original event type ID and code. It SHALL NOT create placeholder players or zero-valued player statistics when the boxscore contains no named player or numeric statistics.
+For live snapshots, the API SHALL link an event to a player using the PBP actor UUID, name, dorsal, and team UUID when those fields are present. It SHALL preserve events without player identity as match movements with no player association, and SHALL retain the original event type ID and code. It SHALL use a movement identifier distinct from the actor UUID and ensure each movement UUID appears at most once in a snapshot. It SHALL NOT create placeholder players or zero-valued player statistics when the boxscore contains no named player or numeric statistics.
 
 #### Scenario: Resolve a PBP actor missing from the boxscore
 - **WHEN** an event contains a player UUID, actor name, dorsal, and team UUID but the boxscore player has only a UUID
@@ -44,6 +44,10 @@ For live snapshots, the API SHALL link an event to a player using the PBP actor 
 #### Scenario: Use boxscore-provided player statistics
 - **WHEN** a named PBP actor has numeric player statistics in the latest boxscore
 - **THEN** the API links the actor to that boxscore player and persists the available statistics
+
+#### Scenario: Event has no movement UUID
+- **WHEN** a PBP event has an actor UUID but no movement UUID
+- **THEN** the API generates a unique movement identity instead of reusing the actor UUID
 
 ### Requirement: Replace a live snapshot atomically
 For requests with `liveMatchId`, the API SHALL upsert the match and replace its match-specific statistics, shots, score evolution, and movements within one database transaction. If the replacement fails, the previous successfully persisted match and its associated data SHALL remain intact. Requests without `liveMatchId` SHALL continue through the existing persistence path.
