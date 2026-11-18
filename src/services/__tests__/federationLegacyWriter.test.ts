@@ -142,6 +142,34 @@ test('uses the direct-match ID as the stable legacy match identity when provided
   assert.equal(operations.some(operation => operation.table === 'partido_movimientos' && operation.method === 'delete'), false);
 });
 
+test('preserves federation playing time as seconds in live and legacy imports', async () => {
+  const normalized = normalizeFederationMatch(stats, pbp);
+  const firstPlayer = normalized.players[0];
+  const playerStat = normalized.playerStats.find(stat => stat.playerId === firstPlayer.id);
+  assert.ok(playerStat?.secondsPlayed);
+  const expectedSeconds = playerStat.secondsPlayed;
+  const metadata = {
+    temporada: '2026/27',
+    categoria: normalized.category.name,
+    competicion: normalized.competition.name
+  };
+
+  const liveDb = createRecordingDatabase();
+  await persistFederationMatchToLegacy(
+    normalized, metadata, 7, undefined, liveDb.database, undefined, '302113'
+  );
+  const liveRows = liveDb.operations.find(operation => operation.table === 'replace_live_match_snapshot')
+    ?.value.p_player_stats as Array<{ jugador_id: string; tiempo_jugado: number }>;
+  assert.equal(liveRows[0].tiempo_jugado, expectedSeconds);
+
+  const legacyDb = createRecordingDatabase();
+  await persistFederationMatchToLegacy(normalized, metadata, 7, undefined, legacyDb.database);
+  const legacyRows = legacyDb.operations.filter(operation =>
+    operation.table === 'estadisticas_jugador_partido' && operation.method === 'upsert'
+  );
+  assert.equal(legacyRows[0].value.tiempo_jugado, expectedSeconds);
+});
+
 test('uses a separate service-role database client for the live snapshot RPC', async () => {
   const normalized = normalizeFederationMatch(stats, pbp);
   const { database: anonDatabase, operations: anonOperations } = createRecordingDatabase();
