@@ -4,11 +4,12 @@ Los datos del partido solo están disponibles mientras la URL de directo permane
 
 ## What Changes
 
-- Extender el contrato de `POST /api/federation/import` para recibir el identificador numérico de la URL de directo y los snapshots en el formato de la importación federativa existente.
+- Añadir `POST /api/federation/live-import` para recibir el identificador numérico de la URL de directo y snapshots en el formato federativo.
+- Mantener `POST /api/federation/import` como ruta original, sin alterar su contrato ni comportamiento; rechazar allí payloads con `liveMatchId` para evitar mezclar ambos flujos.
 - Usar ese identificador como identidad estable del partido y reemplazar los movimientos, estadísticas, tiros y evolución con el snapshot más reciente en cada importación repetida.
 - Relacionar actores del play-by-play con jugadores mediante el UUID, nombre y dorsal disponibles; conservar como movimientos de partido los eventos sin actor y no inventar estadísticas individuales ausentes.
 - Hacer atómica la sustitución de los datos del partido solo para el nuevo flujo directo, sin cambiar la ruta de escritura de los clientes existentes.
-- Mantener compatibilidad con los clientes que no envían el nuevo identificador.
+- Mantener compatibilidad con los clientes originales que usan `/api/federation/import` sin `liveMatchId`.
 - Añadir pruebas que cubran snapshots repetidos, movimientos nuevos e identidad estable.
 
 ## Capabilities
@@ -23,8 +24,9 @@ Ninguna.
 
 ## Impact
 
-- Proyecto Scraper: `POST /api/federation/import`, normalización y persistencia de partidos en `src/services/federationLegacyWriter.ts`, además del OpenAPI y las pruebas/documentación de la API.
+- Proyecto Scraper: nueva ruta `POST /api/federation/live-import`; la extensión de Scraper conserva `POST /api/federation/import`. Ambos reutilizan la normalización, pero solo el endpoint live acepta `liveMatchId` y usa la persistencia transaccional.
+- Proyecto matchOnline: cambiar el envío de snapshots al endpoint dedicado `/api/federation/live-import`.
 - Migración aditiva en `supabase/migrations` para agregar una RPC transaccional invocada únicamente por las importaciones con `liveMatchId`; los clientes existentes conservan el código de persistencia actual.
-- La API existente ya hace upsert del partido y elimina las estadísticas, movimientos y evolución anteriores antes de persistir la nueva instantánea. La importación en directo debe mantener esa sustitución, pero usar explícitamente el ID numérico estable de la URL para identificar el partido entre refrescos.
+- La API existente ya hace upsert del partido y elimina las estadísticas, movimientos y evolución anteriores antes de persistir la nueva instantánea. El endpoint live debe mantener esa sustitución, pero usar explícitamente el ID numérico estable de la URL para identificar el partido entre refrescos.
 - El cambio complementario de la extensión Firefox se especifica en `../matchOnline/openspec/changes/matchonline-live-import`.
 - No se prevén cambios en la aplicación Stats ni nuevas tablas; se añade una migración SQL con una RPC transaccional sobre las tablas legacy existentes.

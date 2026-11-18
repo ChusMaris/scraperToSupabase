@@ -139,8 +139,8 @@ app.post('/api/complementary-stats/import', async (req, res) => {
   }
 });
 
-app.post('/api/federation/import', async (req, res) => {
-  const validationError = validateFederationImportBody(req.body);
+const createFederationImportHandler = (mode: 'legacy' | 'live') => async (req: express.Request, res: express.Response) => {
+  const validationError = validateFederationImportBody(req.body, mode);
   if (validationError) {
     res.status(400).json({ ok: false, error: validationError });
     return;
@@ -151,7 +151,7 @@ app.post('/api/federation/import', async (req, res) => {
     return;
   }
 
-  const liveMatchId = getLiveMatchId(req.body);
+  const liveMatchId = mode === 'live' ? getLiveMatchId(req.body) : undefined;
   if (liveMatchId && !supabaseServiceRole) {
     res.status(503).json({
       ok: false,
@@ -222,7 +222,7 @@ app.post('/api/federation/import', async (req, res) => {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown import error';
-    console.error('[api] Import failed:', message);
+    console.error(`[api] ${mode === 'live' ? 'Live import' : 'Import'} failed:`, message);
     if (wantsEventStream) {
       writeEvent({ type: 'error', error: message });
       res.end();
@@ -230,7 +230,10 @@ app.post('/api/federation/import', async (req, res) => {
       res.status(500).json({ ok: false, error: message });
     }
   }
-});
+};
+
+app.post('/api/federation/import', createFederationImportHandler('legacy'));
+app.post('/api/federation/live-import', createFederationImportHandler('live'));
 
 app.listen(port, () => {
   console.log(`Federation API running on http://localhost:${port}`);

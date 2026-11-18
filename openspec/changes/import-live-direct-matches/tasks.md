@@ -4,7 +4,8 @@
 
 ## 2. Add stable live-match identity
 
-- [x] 2.1 Extend `POST /api/federation/import` validation and request handling to accept an optional numeric `liveMatchId` while preserving existing request aliases.
+- [x] 2.1 Add validation and request handling for numeric `liveMatchId` while preserving the original federation import request aliases.
+- [x] 2.4 Add `POST /api/federation/live-import` for MatchOnline and keep `/api/federation/import` on the legacy contract; reject live IDs on the legacy route.
 - [x] 2.2 Pass the direct-match ID to persistence and prioritize it when deriving `sourceMatchId` and the legacy match ID.
 - [x] 2.3 Resolve PBP players from actor UUID/name/dorsal/team when available, preserve non-player events and event type identifiers, derive score evolution from PBP when absent, and reject incomplete payloads without fabricating player statistics.
 
@@ -16,8 +17,10 @@
 - [ ] 3.4 Verify against Supabase that a failed RPC replacement leaves the prior snapshot intact (legacy requests are unit-tested not to invoke the RPC).
 - [x] 3.5 Keep movement UUIDs distinct from player UUIDs, namespace them by live match, and deduplicate repeated movement IDs before calling the snapshot RPC.
 - [x] 3.6 Keep shot UUIDs distinct from player UUIDs, namespace them by live match, and deduplicate repeated shot IDs before calling the snapshot RPC.
+- [x] 3.7 Preserve federation playing time as integer seconds in live and legacy persistence, with regression coverage.
 
 ## 4. Document and validate the API contract
 
 - [x] 4.1 Update OpenAPI and API documentation with `liveMatchId`, the accepted snapshot shape, and repeated-import semantics.
 - [x] 4.2 Run targeted API tests and the API TypeScript build.
+- [x] 4.3 Document both federation import routes separately and cover their route-specific request validation.

@@ -48,9 +48,19 @@ const validateLiveSnapshot = (statsPayload: unknown, pbpPayload: unknown): strin
   return null;
 };
 
-export const validateFederationImportBody = (body: unknown): string | null => {
+export const validateFederationImportBody = (
+  body: unknown,
+  mode?: 'legacy' | 'live'
+): string | null => {
   if (!isRecord(body)) {
     return 'Request body is not an object';
+  }
+
+  if (mode === 'legacy' && body.liveMatchId !== undefined) {
+    return 'Live snapshots must use /api/federation/live-import';
+  }
+  if (mode === 'live' && body.liveMatchId === undefined) {
+    return 'Live imports require liveMatchId';
   }
 
   const statsPayload = body.statsPayload ?? body.mainJson;

@@ -35,6 +35,7 @@ export const openApiDocument = {
       post: {
         tags: ['Federación'],
         summary: 'Importar payload de partido y play-by-play',
+        description: 'Ruta original usada por la extensión de Scraper. No admite liveMatchId; usa /api/federation/live-import para snapshots de MatchOnline.',
         requestBody: {
           required: true,
           content: {
@@ -68,20 +69,46 @@ export const openApiDocument = {
                     properties: { playByPlay: { type: 'array', items: { type: 'object' } } }
                   },
                   metadata: { type: 'object', additionalProperties: true },
-                  sourceUrl: { type: 'string', format: 'uri' },
-                  liveMatchId: {
-                    oneOf: [
-                      { type: 'integer', minimum: 1, maximum: 9007199254740991 },
-                      { type: 'string', pattern: '^[1-9][0-9]*$' }
-                    ],
-                    description: 'Identificador numérico de /directe/<id>. Repetir este ID sustituye atómicamente el snapshot anterior.'
-                  }
+                  sourceUrl: { type: 'string', format: 'uri' }
                 }
               }
             }
           }
         },
         responses: { '200': { description: 'Partido importado' }, '400': { description: 'Payload no válido' }, '500': { description: 'Error durante la importación' } }
+      }
+    },
+    '/api/federation/live-import': {
+      post: {
+        tags: ['Federación'],
+        summary: 'Importar o reemplazar un snapshot de partido directo',
+        description: 'Endpoint exclusivo para MatchOnline. Repetir liveMatchId reemplaza atómicamente los datos del snapshot; la importación federativa original permanece en /api/federation/import.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                allOf: [
+                  { $ref: '#/paths/~1api~1federation~1import/post/requestBody/content/application~1json/schema' },
+                  {
+                    type: 'object',
+                    required: ['liveMatchId'],
+                    properties: {
+                      liveMatchId: {
+                        oneOf: [
+                          { type: 'integer', minimum: 1, maximum: 9007199254740991 },
+                          { type: 'string', pattern: '^[1-9][0-9]*$' }
+                        ],
+                        description: 'Identificador numérico de /directe/<id>. Repetir este ID sustituye atómicamente el snapshot anterior.'
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        responses: { '200': { description: 'Snapshot del partido directo importado' }, '400': { description: 'Snapshot o liveMatchId no válido' }, '503': { description: 'Importación en directo no configurada' }, '500': { description: 'Error durante la importación' } }
       }
     },
     '/api/complementary-stats/options': {

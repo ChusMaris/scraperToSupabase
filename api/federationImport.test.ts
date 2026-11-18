@@ -66,6 +66,27 @@ test('validates complete direct-match snapshots and keeps legacy aliases compati
   }), null);
 });
 
+test('keeps live snapshots off the legacy endpoint and requires the ID on the live endpoint', () => {
+  assert.equal(validateFederationImportBody({
+    mainJson: {},
+    movesJson: {}
+  }, 'legacy'), null);
+  assert.match(validateFederationImportBody({
+    liveMatchId: '302113',
+    statsPayload,
+    pbpPayload
+  }, 'legacy') ?? '', /live-import/);
+  assert.match(validateFederationImportBody({
+    statsPayload,
+    pbpPayload
+  }, 'live') ?? '', /require liveMatchId/);
+  assert.equal(validateFederationImportBody({
+    liveMatchId: '302113',
+    statsPayload,
+    pbpPayload
+  }, 'live'), null);
+});
+
 test('rejects invalid direct-match IDs and incomplete live payloads', () => {
   assert.match(validateFederationImportBody({
     liveMatchId: '30/2113',

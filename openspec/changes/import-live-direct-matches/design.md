@@ -1,6 +1,6 @@
 ## Context
 
-La API `POST /api/federation/import` acepta `statsPayload`, `pbpPayload`, metadatos y `sourceUrl`; normaliza el partido y llama a `persistFederationMatchToLegacy`. Esta función hace upsert del partido por `id_match_extern`, pero solo obtiene la identidad de un UUID del payload/URL o de un slug de equipos y fecha. No utiliza el ID numérico de `/directe/<id>`.
+La importación federativa original y la importación directa son flujos similares, pero no iguales. La extensión de Scraper usa `POST /api/federation/import` y debe conservar su contrato y comportamiento. MatchOnline enviará snapshots repetidos a un endpoint nuevo, `POST /api/federation/live-import`, que acepta `liveMatchId` y usa persistencia transaccional.
 
 El JSON facilitado para el directo contiene `header`, `boxscore` y `playByPlay`. La extensión de Scraper ya captura los endpoints `/matches/stats` y `/matches/pbp`; matchOnline puede reutilizar esa técnica en lugar de enviar su SSE resumido de marcador/jugadores, que no contiene el contrato completo de importación.
 
@@ -31,9 +31,10 @@ En cada importación, el escritor elimina los movimientos, evolución y estadís
 
 4. **No fabricar estadísticas de jugadores ausentes.** No crear jugadores con nombre `Unknown` para elementos del roster que solo contienen UUID. En los snapshots en directo, persistir estadísticas individuales solo cuando el boxscore proporciona valores numéricos; los jugadores identificados a través del PBP siguen vinculados a sus movimientos aunque su boxscore todavía no tenga estadísticas.
 
-5. **Hacer atómica la actualización de datos del partido solo para imports live.** Añadir una RPC SQL `SECURITY INVOKER` con `search_path` fijo y permiso de ejecución concedido solo a `service_role`. La API usa una clave service-role exclusivamente para esta RPC; mantiene el cliente anon para preparar catálogos, equipos, jugadores y plantillas. Así se evitan políticas RLS incompletas sin abrir inserciones generales ni exponer la RPC a `anon`. Imports sin `liveMatchId` mantienen intacto el camino actual.
-
-6. **Validar antes de escribir.** Rechazar ID no numérico, fecha/marcador/equipos inválidos y estructuras incompletas de stats/PBP antes de tocar la base de datos. No convertir campos ausentes en datos ficticios.
+5. **Separar las rutas y conservar el cliente original.** `POST /api/federation/import` mantiene el camino original y rechaza `liveMatchId` con una indicación de la ruta live. `POST /api/federation/live-import` requiere y valida `liveMatchId`, y reutiliza normalización sin cambiar la ruta original de persistencia.
+6. **Hacer atómica la actualización live.** Añadir una RPC SQL `SECURITY INVOKER` con `search_path` fijo y permiso de ejecución concedido solo a `service_role`. La API usa una clave service-role exclusivamente para esta RPC; mantiene el cliente anon para preparar catálogos, equipos, jugadores y plantillas. Así se evitan políticas RLS incompletas sin abrir inserciones generales ni exponer la RPC a `anon`.
+7. **Validar antes de escribir.** Rechazar ID no numérico, fecha/marcador/equipos inválidos y estructuras incompletas de stats/PBP antes de tocar la base de datos. No convertir campos ausentes en datos ficticios.
+8. **Preservar segundos en la persistencia.** La federación entrega `computed.seconds` en segundos y la columna legacy `tiempo_jugado` es `integer`. Ambos escritores federativos conservan los segundos; Stats es responsable de formatear el valor como `MM:SS` y de convertirlo a minutos solo para agregaciones.
 
 ## Risks / Trade-offs
 
@@ -45,8 +46,8 @@ En cada importación, el escritor elimina los movimientos, evolución y estadís
 ## Migration Plan
 
 1. Aplicar `20261109_replace_live_match_snapshot.sql` si aún no está aplicada, y después `20261114_fix_live_match_snapshot_rls.sql` y `20261115_restrict_live_match_snapshot_rpc.sql` a Supabase.
-2. Configurar `SUPABASE_SERVICE_ROLE_KEY` como secreto del servidor y desplegar la API; las rutas sin `liveMatchId` siguen usando el cliente anon.
-3. Distribuir matchOnline para que capture `/matches/stats` y `/matches/pbp` y envíe snapshots completos con el ID directo.
+2. Configurar `SUPABASE_SERVICE_ROLE_KEY` como secreto del servidor y desplegar la API con ambos endpoints.
+3. Distribuir matchOnline para que envíe snapshots completos con ID directo a `/api/federation/live-import`; la extensión original de Scraper continúa usando `/api/federation/import`.
 4. Si se revierte, detener la importación móvil; los clientes anteriores continúan usando su ruta actual y los snapshots ya guardados se conservan.
 
 ## Open Questions

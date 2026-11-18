@@ -8,6 +8,7 @@ test('documents current health, federation and complementary statistics routes',
     '/api/complementary-stats/import',
     '/api/complementary-stats/options',
     '/api/federation/import',
+    '/api/federation/live-import',
     '/api/federation/options',
     '/health'
   ]);
@@ -20,8 +21,8 @@ test('uses the same unauthenticated access model as the existing federation impo
   assert.equal(components.securitySchemes, undefined);
 });
 
-test('documents the optional stable identity for repeated live snapshots', () => {
-  const operation = openApiDocument.paths['/api/federation/import'].post as {
+test('documents separate legacy and direct-match import endpoints', () => {
+  const legacyOperation = openApiDocument.paths['/api/federation/import'].post as {
     requestBody: {
       content: {
         'application/json': {
@@ -30,5 +31,17 @@ test('documents the optional stable identity for repeated live snapshots', () =>
       };
     };
   };
-  assert.ok(operation.requestBody.content['application/json'].schema.properties.liveMatchId);
+  const liveOperation = openApiDocument.paths['/api/federation/live-import'].post as {
+    requestBody: {
+      content: {
+        'application/json': {
+          schema: { allOf: Array<{ required?: string[]; properties?: Record<string, unknown> }> };
+        };
+      };
+    };
+  };
+  assert.equal('liveMatchId' in legacyOperation.requestBody.content['application/json'].schema.properties, false);
+  const liveSchema = liveOperation.requestBody.content['application/json'].schema.allOf[1];
+  assert.ok(liveSchema.required?.includes('liveMatchId'));
+  assert.ok(liveSchema.properties?.liveMatchId);
 });

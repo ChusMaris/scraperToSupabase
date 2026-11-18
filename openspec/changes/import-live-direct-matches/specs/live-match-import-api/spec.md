@@ -1,15 +1,23 @@
 ## ADDED Requirements
 
-### Requirement: Import live snapshots using a stable direct-match identity
-The federation import API SHALL accept an optional numeric `liveMatchId` with a match snapshot and SHALL use that value as the stable source identity for the match. The API SHALL retain its existing payload fields and identity behavior for requests that do not provide `liveMatchId`.
+### Requirement: Keep legacy and live federation imports on separate endpoints
+The API SHALL preserve `POST /api/federation/import` as the original federation-import endpoint and SHALL provide `POST /api/federation/live-import` for MatchOnline snapshots. The original endpoint SHALL retain its request and persistence behavior for requests without `liveMatchId` and SHALL reject requests containing `liveMatchId` with an explicit instruction to use the live endpoint. The live endpoint SHALL require a valid numeric `liveMatchId`, validate complete stats and play-by-play payloads, and use that value as the stable source identity for the match.
 
 #### Scenario: First snapshot for a direct match
-- **WHEN** the API receives a valid match snapshot with a numeric `liveMatchId`
+- **WHEN** `/api/federation/live-import` receives a valid match snapshot with a numeric `liveMatchId`
 - **THEN** it persists the match using that ID as the source identity
 
 #### Scenario: Existing client omits the direct-match ID
-- **WHEN** an existing federation import client submits a valid request without `liveMatchId`
+- **WHEN** an existing federation import client submits a valid request without `liveMatchId` to `/api/federation/import`
 - **THEN** the API processes it using the existing request contract and identity fallback
+
+#### Scenario: Direct-match payload is sent to the legacy endpoint
+- **WHEN** a request with `liveMatchId` is sent to `/api/federation/import`
+- **THEN** the API rejects it and identifies `/api/federation/live-import` as the correct route
+
+#### Scenario: Live endpoint omits the direct-match ID
+- **WHEN** `/api/federation/live-import` receives a snapshot without `liveMatchId`
+- **THEN** the API rejects it before persistence
 
 #### Scenario: Invalid direct-match ID
 - **WHEN** the API receives a non-numeric `liveMatchId`
@@ -54,7 +62,7 @@ For live snapshots, the API SHALL link an event to a player using the PBP actor 
 - **THEN** the API persists distinct movement UUIDs scoped to each match
 
 ### Requirement: Replace a live snapshot atomically
-For requests with `liveMatchId`, the API SHALL upsert the match and replace its match-specific statistics, shots, score evolution, and movements within one database transaction. If the replacement fails, the previous successfully persisted match and its associated data SHALL remain intact. Requests without `liveMatchId` SHALL continue through the existing persistence path.
+For requests to `/api/federation/live-import`, the API SHALL upsert the match and replace its match-specific statistics, shots, score evolution, and movements within one database transaction. If the replacement fails, the previous successfully persisted match and its associated data SHALL remain intact. Requests to `/api/federation/import` SHALL continue through the existing persistence path and SHALL NOT invoke the live snapshot RPC.
 
 #### Scenario: Successful live snapshot replacement
 - **WHEN** a valid repeated snapshot is persisted for an existing `liveMatchId`
@@ -64,6 +72,17 @@ For requests with `liveMatchId`, the API SHALL upsert the match and replace its 
 - **WHEN** any match-specific row in the transactional replacement fails to write
 - **THEN** the transaction rolls back and the previously persisted match snapshot remains available
 
-#### Scenario: Existing import client uses legacy path
-- **WHEN** a request without `liveMatchId` is imported
+#### Scenario: Existing import client uses the legacy endpoint
+- **WHEN** a request without `liveMatchId` is submitted to `/api/federation/import`
 - **THEN** the API does not invoke the new live snapshot RPC and retains existing persistence behavior
+
+### Requirement: Preserve federation playing time in integer seconds
+The API SHALL persist federation player playing time as integer seconds in `tiempo_jugado`, matching the database column and source field `computed.seconds`. Stats SHALL convert these values for display and aggregation.
+
+#### Scenario: Persist a live player time
+- **WHEN** a federation snapshot reports `computed.seconds` as 596 seconds
+- **THEN** the API persists `tiempo_jugado` as integer `596` and Stats displays `9:56`
+
+#### Scenario: Persist a legacy federation import time
+- **WHEN** a federation import without `liveMatchId` reports player time in seconds
+- **THEN** the API persists the integer seconds unchanged in `tiempo_jugado`
