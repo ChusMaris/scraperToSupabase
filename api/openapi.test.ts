@@ -9,6 +9,7 @@ test('documents current health, federation and complementary statistics routes',
     '/api/complementary-stats/options',
     '/api/federation/import',
     '/api/federation/live-import',
+    '/api/federation/live-score',
     '/api/federation/options',
     '/health'
   ]);

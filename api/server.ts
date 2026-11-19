@@ -4,7 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 import { normalizeFederationMatch } from '../src/services/federationNormalizer.js';
 import { persistFederationMatchToLegacy } from '../src/services/federationLegacyWriter.js';
 import { getComplementaryStatsOptions, importComplementaryStats } from './complementaryStats.js';
-import { getLiveMatchId, validateFederationImportBody } from './federationImport.js';
+import {
+  getLiveMatchId,
+  validateFederationImportBody,
+  validateLiveScoreUpdateBody
+} from './federationImport.js';
 import swaggerUi from 'swagger-ui-express';
 import { openApiDocument } from './openapi.js';
 
@@ -234,6 +238,55 @@ const createFederationImportHandler = (mode: 'legacy' | 'live') => async (req: e
 
 app.post('/api/federation/import', createFederationImportHandler('legacy'));
 app.post('/api/federation/live-import', createFederationImportHandler('live'));
+
+app.post('/api/federation/live-score', async (req, res) => {
+  const validationError = validateLiveScoreUpdateBody(req.body);
+  if (validationError) {
+    res.status(400).json({ ok: false, error: validationError });
+    return;
+  }
+
+  if (!supabaseServiceRole) {
+    res.status(503).json({
+      ok: false,
+      error: 'Live score updates require SUPABASE_SERVICE_ROLE_KEY to be configured on the API server'
+    });
+    return;
+  }
+
+  const liveMatchId = getLiveMatchId(req.body);
+  if (!liveMatchId) {
+    res.status(400).json({ ok: false, error: 'Live score updates require liveMatchId' });
+    return;
+  }
+
+  try {
+    const localScore = Number(req.body.localScore);
+    const visitorScore = Number(req.body.visitorScore);
+    const { data, error } = await supabaseServiceRole
+      .from('partidos')
+      .update({ puntos_local: localScore, puntos_visitante: visitorScore })
+      .eq('id_match_extern', liveMatchId)
+      .select('id')
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    if (!data) {
+      res.status(404).json({
+        ok: false,
+        error: `No live snapshot exists for match ${liveMatchId}; submit a full live-import first`
+      });
+      return;
+    }
+
+    console.info(`[api] Live score updated: ${liveMatchId} ${localScore}-${visitorScore}.`);
+    res.status(200).json({ ok: true, score: { local: localScore, visitor: visitorScore } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown live score update error';
+    console.error('[api] Live score update failed:', message);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
 
 app.listen(port, () => {
   console.log(`Federation API running on http://localhost:${port}`);

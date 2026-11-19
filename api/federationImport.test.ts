@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { normalizeFederationMatch } from '../src/services/federationNormalizer.js';
-import { getLiveMatchId, validateFederationImportBody } from './federationImport.js';
+import {
+  getLiveMatchId,
+  validateFederationImportBody,
+  validateLiveScoreUpdateBody
+} from './federationImport.js';
 
 const localTeamUuid = 'f0da967b-481f-41a6-a06e-aa6e6bd21b01';
 const visitorTeamUuid = 'a9f80760-ac96-4c2a-96b5-ede73f32149a';
@@ -104,6 +108,29 @@ test('rejects invalid direct-match IDs and incomplete live payloads', () => {
     pbpPayload: { playByPlay: null }
   }) ?? '', /playByPlay arrays/);
   assert.throws(() => getLiveMatchId({ liveMatchId: '9223372036854775808' }), /legacy database range/);
+});
+
+test('validates incremental live-score updates without requiring a full snapshot', () => {
+  assert.equal(validateLiveScoreUpdateBody({
+    liveMatchId: '302113',
+    localScore: 63,
+    visitorScore: 34
+  }), null);
+  assert.match(validateLiveScoreUpdateBody({
+    liveMatchId: '302113',
+    localScore: -1,
+    visitorScore: 34
+  }) ?? '', /localScore must be a non-negative safe integer/);
+  assert.match(validateLiveScoreUpdateBody({
+    liveMatchId: '302113',
+    localScore: 63.5,
+    visitorScore: 34
+  }) ?? '', /localScore must be a non-negative safe integer/);
+  assert.match(validateLiveScoreUpdateBody({
+    liveMatchId: 'bad',
+    localScore: 63,
+    visitorScore: 34
+  }) ?? '', /positive numeric ID/);
 });
 
 test('uses play-by-play actor identity for players and retains events without actors', () => {

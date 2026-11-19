@@ -81,3 +81,24 @@ export const validateFederationImportBody = (
 
   return null;
 };
+
+export const validateLiveScoreUpdateBody = (body: unknown): string | null => {
+  if (!isRecord(body)) {
+    return 'Request body is not an object';
+  }
+
+  try {
+    if (!getLiveMatchId(body)) return 'Live score updates require liveMatchId';
+  } catch (error) {
+    return error instanceof Error ? error.message : 'liveMatchId is invalid';
+  }
+
+  for (const field of ['localScore', 'visitorScore'] as const) {
+    const score = body[field];
+    if (typeof score !== 'number' || !Number.isSafeInteger(score) || score < 0) {
+      return `${field} must be a non-negative safe integer`;
+    }
+  }
+
+  return null;
+};

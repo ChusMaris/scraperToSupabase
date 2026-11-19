@@ -111,6 +111,41 @@ export const openApiDocument = {
         responses: { '200': { description: 'Snapshot del partido directo importado' }, '400': { description: 'Snapshot o liveMatchId no válido' }, '503': { description: 'Importación en directo no configurada' }, '500': { description: 'Error durante la importación' } }
       }
     },
+    '/api/federation/live-score': {
+      post: {
+        tags: ['Federación'],
+        summary: 'Actualizar inmediatamente el marcador de un partido directo',
+        description: 'Actualiza únicamente los puntos del partido existente. No reemplaza estadísticas, jugadas ni el snapshot completo.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['liveMatchId', 'localScore', 'visitorScore'],
+                properties: {
+                  liveMatchId: {
+                    oneOf: [
+                      { type: 'integer', minimum: 1, maximum: 9007199254740991 },
+                      { type: 'string', pattern: '^[1-9][0-9]*$' }
+                    ]
+                  },
+                  localScore: { type: 'integer', minimum: 0 },
+                  visitorScore: { type: 'integer', minimum: 0 }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          '200': { description: 'Marcador actualizado; los demás datos del snapshot no cambian' },
+          '400': { description: 'ID o marcador no válido' },
+          '404': { description: 'Aún no existe un snapshot completo para este partido' },
+          '503': { description: 'Actualización en directo no configurada' },
+          '500': { description: 'Error actualizando el marcador' }
+        }
+      }
+    },
     '/api/complementary-stats/options': {
       get: {
         tags: ['Estadísticas complementarias'],
